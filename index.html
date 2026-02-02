@@ -3,23 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Particle Network</title>
+    <title>KanlorekDUH Profile</title>
     <style>
         body {
             margin: 0;
             padding: 0;
             background: #0f0f0f;
             overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
+
         canvas {
             display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: -1; /* Canvas musi być pod spodem */
         }
+
+        /* Stylizacja głównego kontenera (karty) */
+        .glass-card {
+            /* Pozycjonowanie */
+            position: relative;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            color: white;
+            width: 300px;
+
+            /* Wygląd "szkła" i ciemny motyw */
+            background: rgba(30, 30, 30, 0.65); /* Półprzezroczyste ciemne tło */
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(12px); /* To tworzy efekt rozmycia tła za kartą */
+            -webkit-backdrop-filter: blur(12px); /* Wsparcie dla Safari */
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Stylizacja zdjęcia profilowego */
+        .profile-img {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%; /* Robi kółko */
+            object-fit: cover;
+            border: 3px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+
+        /* Stylizacja tekstu */
+        h1 {
+            margin: 0 0 25px 0;
+            font-weight: 400;
+            letter-spacing: 1px;
+            font-size: 1.8rem;
+        }
+
+        /* Stylizacja pustego kwadratu */
+        .empty-square {
+            width: 150px;
+            height: 150px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+            margin: 0 auto; /* Centrowanie w poziomie */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: rgba(255,255,255,0.3);
+            font-size: 0.9rem;
+        }
+
     </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
 
+    <div class="glass-card">
+        <img src="https://placehold.co/120x120/2a2a2a/ffffff/png?text=PFP.gif" alt="Profile Picture" class="profile-img">
+        
+        <h1>KanlorekDUH</h1>
+        
+        <div class="empty-square">
+            Pusty kwadrat
+        </div>
+    </div>
+
+
     <script>
+        // SKRYPT ANIMACJI (Ten sam co poprzednio)
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         
@@ -30,9 +105,9 @@
             particleColor: 'rgba(255, 255, 255, 0.8)',
             lineColor: 'rgba(255, 255, 255, 0.2)',
             particleAmount: 100,
-            defaultSpeed: 1,
+            defaultSpeed: 0.8, // Lekko zwolniłem dla lepszego efektu tła
             variantSpeed: 1,
-            linkRadius: 120,
+            linkRadius: 130,
             mouseRadius: 150
         };
 
@@ -62,6 +137,7 @@
                     if (distance < config.mouseRadius) {
                         const forceDirectionX = dx / distance;
                         const forceDirectionY = dy / distance;
+                        // Zwiększyłem siłę odpychania
                         const force = (config.mouseRadius - distance) / config.mouseRadius;
                         const directionX = forceDirectionX * force * 5;
                         const directionY = forceDirectionY * force * 5;
@@ -85,7 +161,10 @@
             height = canvas.height = window.innerHeight;
             
             particles = [];
-            let amount = (width * height) / 9000; 
+            // Dostosowanie ilości cząsteczek do rozdzielczości
+            let amount = (width * height) / 10000; 
+            if (amount < 50) amount = 50; // Minimum cząsteczek
+
             for (let i = 0; i < amount; i++) {
                 particles.push(new Particle());
             }
@@ -105,8 +184,9 @@
 
                     if (distance < config.linkRadius) {
                         ctx.beginPath();
+                        // Dynamiczna przezroczystość linii w zależności od odległości
                         ctx.strokeStyle = `rgba(255, 255, 255, ${1 - distance/config.linkRadius})`;
-                        ctx.lineWidth = 1;
+                        ctx.lineWidth = 0.8;
                         ctx.moveTo(particles[i].x, particles[i].y);
                         ctx.lineTo(particles[j].x, particles[j].y);
                         ctx.stroke();
