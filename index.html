@@ -5,12 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KanlorekDUH</title>
     <style>
+        @font-face {
+            font-family: 'SKfont';
+            src: url('SKfont.ttf') format('truetype');
+        }
+
+        @font-face {
+            font-family: 'RPfont';
+            src: url('RPfont.ttf') format('truetype');
+        }
+
         body {
             margin: 0;
             padding: 0;
             background: #0f0f0f;
             overflow: hidden;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', sans-serif;
             height: 100vh;
             display: flex;
             justify-content: center;
@@ -38,14 +48,9 @@
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: transform 0.3s ease;
             display: flex;
             flex-direction: column;
             align-items: center;
-        }
-
-        .glass-card:hover {
-            transform: translateY(-5px);
         }
 
         .profile-img {
@@ -59,68 +64,54 @@
         }
 
         h1 {
-            margin: 0 0 30px 0;
+            margin: 0 0 20px 0;
+            font-family: 'SKfont', sans-serif;
             font-weight: 400;
             letter-spacing: 2px;
-            font-size: 2rem;
+            font-size: 2.5rem;
             text-shadow: 0 2px 10px rgba(0,0,0,0.5);
         }
 
-        .glass-btn {
-            display: block;
-            width: 100%;
-            padding: 15px 0;
-            background: rgba(255, 255, 255, 0.05);
-            color: white;
-            text-decoration: none;
+        .quote {
+            font-family: 'RPfont', sans-serif;
             font-size: 1.1rem;
-            letter-spacing: 1px;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 10px;
-            transition: all 0.3s ease;
-            box-sizing: border-box;
-            cursor: pointer;
-            margin-bottom: 30px; 
-        }
-
-        .glass-btn:hover {
-            background: rgba(255, 255, 255, 0.15);
-            border-color: rgba(255, 255, 255, 0.4);
-            box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 40px;
+            line-height: 1.4;
+            text-shadow: 0 1px 5px rgba(0,0,0,0.5);
         }
 
         .social-container {
             width: 100%;
             display: flex;
-            flex-direction: column;
-            gap: 15px;
-            margin-top: auto; 
+            flex-direction: row;
+            justify-content: center;
+            align-items: center;
+            gap: 30px;
+            margin-top: 10px;
         }
 
         .social-row {
             display: flex;
             align-items: center;
-            justify-content: center;
-            gap: 15px;
-            font-size: 1rem;
+            gap: 10px;
+            font-family: 'SKfont', sans-serif;
+            font-size: 1.2rem;
             color: rgba(255, 255, 255, 0.8);
             text-decoration: none;
-            transition: opacity 0.2s;
+            transition: transform 0.2s, opacity 0.2s;
+        }
+
+        .social-row:hover {
+            opacity: 1;
+            transform: scale(1.05);
+            color: #fff;
         }
 
         .social-row img {
-            width: 24px;
-            height: 24px;
+            width: 36px;
+            height: 36px;
             object-fit: contain;
-        }
-
-        .yt-link:hover {
-            opacity: 1;
-            color: #fff;
-            text-shadow: 0 0 10px rgba(255,0,0,0.5);
-        }
-
-        .yt-link img {
             filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
         }
 
@@ -134,9 +125,10 @@
         
         <h1>KanlorekDUH</h1>
         
-        <a href="https://kanlorekduh.github.io/aboutme" class="glass-btn">
-            About me
-        </a>
+        <div class="quote">
+            Po co używać jakiegoś guns.lol jak mozna zrobić własną strone<br>
+            ~ KanlorekDUH 2026
+        </div>
 
         <div class="social-container">
             <div class="social-row">
@@ -144,7 +136,7 @@
                 <span>kanlorekduh</span>
             </div>
             
-            <a href="https://www.youtube.com/@kanonek.official" target="_blank" class="social-row yt-link">
+            <a href="https://www.youtube.com/@kanonek.official" target="_blank" class="social-row">
                 <img src="yt.png" alt="YouTube">
                 <span>kanonek.official</span>
             </a>
