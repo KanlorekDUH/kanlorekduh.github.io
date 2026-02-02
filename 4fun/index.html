@@ -1,1 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Physics Stress Lab</title>
+<style>
+    body { margin: 0; background-color: #050505; overflow: hidden; font-family: 'Segoe UI', sans-serif; user-select: none; }
+    canvas { display: block; }
+    #ui {
+        position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+        display: flex; gap: 8px; background: rgba(20, 20, 20, 0.9); padding: 10px;
+        border-radius: 8px; border: 1px solid #333; box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+    .btn {
+        background: #222; color: #aaa; border: 1px solid #444; padding: 10px 20px;
+        cursor: pointer; border-radius: 4px; font-weight: bold; min-width: 60px; text-align: center;
+        transition: 0.2s; text-transform: uppercase; font-size: 12px;
+    }
+    .btn.active { background: #d94e4e; color: #fff; border-color: #ff6b6b; box-shadow: 0 0 10px rgba(217, 78, 78, 0.4); }
+    .btn:hover:not(.active) { background: #333; }
+    #stats { position: absolute; top: 20px; left: 20px; color: #555; pointer-events: none; font-weight: bold; }
+    #paused-msg { color: #d94e4e; display: none; margin-left: 10px; }
+</style>
+</head>
+<body>
 
+<div id="stats">
+    Nodes: 0 | Beams: 0 
+    <span id="paused-msg">[PAUSED]</span>
+</div>
+
+<div id="ui">
+    <div class="btn active" onclick="setMode('BUILD')">Build</div>
+    <div class="btn" onclick="setMode('DRAG')">Drag</div>
+    <div class="btn" onclick="setMode('CUT')">Cut</div>
+    <div class="btn" onclick="setMode('BLAST')">Blast</div>
+    <div class="btn" onclick="reset()">Reset</div>
+</div>
+<canvas id="c"></canvas>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const stats = document.getElementById('stats');
+const pausedMsg = document.getElementById('paused-msg');
+
+let width, height;
+let points = [];
+let sticks = [];
+let mode = 'BUILD';
+let isMouseDown = false;
+let dragPoint = null;
+let mouse = { x: 0, y: 0 };
+let isPaused = false; // Zmienna stanu pauzy
+
+const CFG = {
+    gravity: 0.5,
+    friction: 0.99,
+    groundBounce: 0.5,
+    stiffness: 5,
+    breakThreshold: 120, 
+    snapDistance: 15
+};
+
+// Obsługa Spacji
+window.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+        isPaused = !isPaused;
+        pausedMsg.style.display = isPaused ? 'inline' : 'none';
+    }
+});
+
+class Point {
+    constructor(x, y, pinned = false) {
+        this.x = x;
+        this.y = y;
+        this.oldx = x;
+        this.oldy = y;
+        this.pinned = pinned;
+    }
+
+    update() {
+        if (this.pinned) return;
+        
+        const vx = (this.x - this.oldx) * CFG.friction;
+        const vy = (this.y - this.oldy) * CFG.friction;
+
+        this.oldx = this.x;
+        this.oldy = this.y;
+
+        this.x += vx;
+        this.y += vy + CFG.gravity;
+
+        if (this.y > height) {
+            this.y = height;
+            this.oldy = this.y + vy * CFG.groundBounce;
+        }
+        if (this.x > width) {
+            this.x = width;
+            this.oldx = this.x + vx * CFG.groundBounce;
+        } else if (this.x < 0) {
+            this.x = 0;
+            this.oldx = this.x + vx * CFG.groundBounce;
+        }
+    }
+
+    draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.pinned ? 4 : 2, 0, Math.PI * 2);
+        ctx.fillStyle = this.pinned ? '#d94e4e' : '#fff';
+        ctx.fill();
+    }
+}
+
+class Stick {
+    constructor(p1, p2) {
+        this.p1 = p1;
+        this.p2 = p2;
+        this.length = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        this.active = true;
+        this.stress = 0;
+    }
+
+    update() {
+        if (!this.active) return;
+        
+        const dx = this.p2.x - this.p1.x;
+        const dy = this.p2.y - this.p1.y;
+        const dist = Math.hypot(dx, dy);
+        
+        // Zabezpieczenie przed dzieleniem przez zero
+        if (dist === 0) return;
+
+        const diff = this.length - dist;
+        const percent = diff / dist / 2;
+        const offsetX = dx * percent;
+        const offsetY = dy * percent;
+
+        this.stress = Math.abs(diff);
+
+        if (this.stress > CFG.breakThreshold) {
+            this.active = false;
+            return;
+        }
+
+        if (!this.p1.pinned) {
+            this.p1.x -= offsetX;
+            this.p1.y -= offsetY;
+        }
+        if (!this.p2.pinned) {
+            this.p2.x += offsetX;
+            this.p2.y += offsetY;
+        }
+    }
+
+    draw() {
+        if (!this.active) return;
+        
+        const stressRatio = Math.min(this.stress / CFG.breakThreshold, 1);
+        const r = Math.floor(255 * stressRatio + 50);
+        const gb = Math.floor(255 * (1 - stressRatio));
+        
+        ctx.beginPath();
+        ctx.moveTo(this.p1.x, this.p1.y);
+        ctx.lineTo(this.p2.x, this.p2.y);
+        ctx.strokeStyle = `rgb(${r},${gb},${gb})`;
+        ctx.lineWidth = 1 + stressRatio * 2;
+        ctx.stroke();
+    }
+}
+
+function resize() {
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.width = width;
+    canvas.height = height;
+}
+
+function getClosestPoint(x, y, radius = 20) {
+    let closest = null;
+    let minDist = radius;
+    for (const p of points) {
+        const d = Math.hypot(p.x - x, p.y - y);
+        if (d < minDist) {
+            minDist = d;
+            closest = p;
+        }
+    }
+    return closest;
+}
+
+function createBridge() {
+    points = [];
+    sticks = [];
+    isPaused = false;
+    pausedMsg.style.display = 'none';
+    
+    const startX = width * 0.2;
+    const endX = width * 0.8;
+    const y = height * 0.4;
+    const segments = 15;
+    const step = (endX - startX) / segments;
+
+    let prevTop = null;
+    let prevBot = null;
+
+    for (let i = 0; i <= segments; i++) {
+        const px = startX + i * step;
+        const pinned = (i === 0 || i === segments);
+        
+        const pTop = new Point(px, y, pinned);
+        const pBot = new Point(px, y + 60, pinned);
+        
+        points.push(pTop, pBot);
+        sticks.push(new Stick(pTop, pBot));
+
+        if (prevTop) {
+            sticks.push(new Stick(prevTop, pTop));
+            sticks.push(new Stick(prevBot, pBot));
+            sticks.push(new Stick(prevTop, pBot)); 
+            sticks.push(new Stick(prevBot, pTop)); 
+        }
+
+        prevTop = pTop;
+        prevBot = pBot;
+    }
+}
+
+window.addEventListener('resize', resize);
+window.setMode = (m) => {
+    mode = m;
+    document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+};
+window.reset = createBridge;
+
+canvas.addEventListener('mousedown', e => {
+    isMouseDown = true;
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
+
+    if (mode === 'DRAG') {
+        dragPoint = getClosestPoint(mouse.x, mouse.y, 50);
+        // Reset prędkości przy łapaniu, żeby nie wystrzeliło po puszczeniu pauzy
+        if(dragPoint) {
+            dragPoint.oldx = dragPoint.x;
+            dragPoint.oldy = dragPoint.y;
+        }
+    } else if (mode === 'BUILD') {
+        const existing = getClosestPoint(mouse.x, mouse.y, CFG.snapDistance);
+        if (!existing) {
+            const p = new Point(mouse.x, mouse.y, false);
+            points.push(p);
+            dragPoint = p;
+        } else {
+            dragPoint = existing;
+        }
+    } else if (mode === 'BLAST') {
+        points.forEach(p => {
+            const dx = p.x - mouse.x;
+            const dy = p.y - mouse.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist < 200) {
+                const force = (200 - dist) * 0.5;
+                p.oldx -= (dx / dist) * force;
+                p.oldy -= (dy / dist) * force;
+            }
+        });
+    } else if (mode === 'CUT') {
+        sticks.forEach(s => {
+            const cx = (s.p1.x + s.p2.x) / 2;
+            const cy = (s.p1.y + s.p2.y) / 2;
+            if (Math.hypot(cx - mouse.x, cy - mouse.y) < 20) {
+                s.active = false;
+            }
+        });
+    }
+});
+
+canvas.addEventListener('mousemove', e => {
+    const mx = e.clientX;
+    const my = e.clientY;
+    
+    if (isMouseDown && mode === 'DRAG' && dragPoint) {
+        dragPoint.x = mx;
+        dragPoint.y = my;
+        // W trybie pauzy aktualizujemy też oldx/oldy, żeby obiekt nie wystrzelił po wznowieniu
+        if (isPaused) {
+            dragPoint.oldx = mx;
+            dragPoint.oldy = my;
+        }
+    }
+    
+    mouse.x = mx;
+    mouse.y = my;
+});
+
+canvas.addEventListener('mouseup', e => {
+    if (mode === 'BUILD' && dragPoint) {
+        const target = getClosestPoint(e.clientX, e.clientY, CFG.snapDistance);
+        if (target && target !== dragPoint) {
+            sticks.push(new Stick(dragPoint, target));
+        } else if (!target) {
+            const p = new Point(e.clientX, e.clientY);
+            points.push(p);
+            sticks.push(new Stick(dragPoint, p));
+        }
+    }
+    isMouseDown = false;
+    dragPoint = null;
+});
+
+canvas.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    const p = getClosestPoint(e.clientX, e.clientY);
+    if (p) p.pinned = !p.pinned;
+});
+
+function update() {
+    // Jeśli PAUZA, pomijamy obliczenia fizyki
+    if (!isPaused) {
+        points.forEach(p => p.update());
+        for(let i=0; i<5; i++) {
+            sticks.forEach(s => s.update());
+        }
+    }
+    // Zawsze usuwamy zniszczone belki
+    sticks = sticks.filter(s => s.active);
+}
+
+function draw() {
+    ctx.fillStyle = '#050505';
+    ctx.fillRect(0, 0, width, height);
+
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for(let i=0; i<width; i+=40) { ctx.moveTo(i,0); ctx.lineTo(i,height); }
+    for(let i=0; i<height; i+=40) { ctx.moveTo(0,i); ctx.lineTo(width,i); }
+    ctx.stroke();
+
+    sticks.forEach(s => s.draw());
+    points.forEach(p => p.draw());
+
+    if (isMouseDown && mode === 'BUILD' && dragPoint) {
+        ctx.beginPath();
+        ctx.moveTo(dragPoint.x, dragPoint.y);
+        ctx.lineTo(mouse.x, mouse.y);
+        ctx.strokeStyle = '#555';
+        ctx.setLineDash([5, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+    }
+
+    if (mode === 'BLAST') {
+        ctx.beginPath();
+        ctx.arc(mouse.x, mouse.y, 30, 0, Math.PI*2);
+        ctx.strokeStyle = 'rgba(255, 100, 100, 0.5)';
+        ctx.stroke();
+    }
+    
+    // Aktualizacja licznika
+    stats.innerHTML = `Nodes: ${points.length} | Beams: ${sticks.length} <span id="paused-msg" style="display:${isPaused ? 'inline' : 'none'}; color:#d94e4e; margin-left:10px;">[PAUSED]</span>`;
+}
+
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+resize();
+createBridge();
+loop();
+</script>
+</body>
+</html>
