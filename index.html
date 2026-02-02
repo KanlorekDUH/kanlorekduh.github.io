@@ -83,14 +83,24 @@
             text-shadow: 0 1px 5px rgba(0,0,0,0.5);
         }
 
+        /* Zmieniono na column, żeby 4fun był nad resztą */
         .social-container {
             width: 100%;
+            display: flex;
+            flex-direction: column; 
+            justify-content: center;
+            align-items: center;
+            gap: 15px; /* Odstęp między górnym 4fun a dolnym rzędem */
+            margin-top: 10px;
+        }
+
+        /* Nowy kontener dla Discorda i YT, żeby były obok siebie */
+        .social-bottom-row {
             display: flex;
             flex-direction: row;
             justify-content: center;
             align-items: center;
             gap: 30px;
-            margin-top: 10px;
         }
 
         .social-row {
@@ -102,6 +112,7 @@
             color: rgba(255, 255, 255, 0.8);
             text-decoration: none;
             transition: transform 0.2s, opacity 0.2s;
+            cursor: pointer; /* Dodano kursor */
         }
 
         .social-row:hover {
@@ -133,15 +144,22 @@
         </div>
 
         <div class="social-container">
-            <div class="social-row">
-                <img src="dc.png" alt="Discord">
-                <span>kanlorekduh</span>
-            </div>
-            
-            <a href="https://www.youtube.com/@kanonek.official" target="_blank" class="social-row">
-                <img src="yt.png" alt="YouTube">
-                <span>kanonek.official</span>
+            <a href="https://kanlorekduh.github.io/4fun" class="social-row">
+                <img src="fun.png" alt="4fun">
+                <span>4fun</span>
             </a>
+
+            <div class="social-bottom-row">
+                <div class="social-row">
+                    <img src="dc.png" alt="Discord">
+                    <span>kanlorekduh</span>
+                </div>
+                
+                <a href="https://www.youtube.com/@kanonek.official" target="_blank" class="social-row">
+                    <img src="yt.png" alt="YouTube">
+                    <span>kanonek.official</span>
+                </a>
+            </div>
         </div>
     </div>
 
@@ -151,6 +169,7 @@
         
         let width, height;
         let particles = [];
+        let isPaused = false; // Zmienna do zatrzymywania czasu
         
         const config = {
             particleColor: 'rgba(255, 255, 255, 0.8)',
@@ -164,6 +183,14 @@
 
         let mouse = { x: null, y: null };
 
+        // Obsługa spacji
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault(); // Zapobiega przewijaniu strony spacją (gdyby pojawił się pasek)
+                isPaused = !isPaused;
+            }
+        });
+
         class Particle {
             constructor() {
                 this.x = Math.random() * width;
@@ -174,6 +201,9 @@
             }
 
             update() {
+                // Jeśli jest pauza, nie aktualizujemy pozycji
+                if (isPaused) return;
+
                 this.x += this.vx;
                 this.y += this.vy;
 
