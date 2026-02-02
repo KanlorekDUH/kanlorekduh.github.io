@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KanlorekDUH Profile</title>
+    <title>KanlorekDUH</title>
     <style>
         body {
             margin: 0;
@@ -22,79 +22,88 @@
             position: absolute;
             top: 0;
             left: 0;
-            z-index: -1; /* Canvas musi być pod spodem */
+            z-index: -1;
         }
 
-        /* Stylizacja głównego kontenera (karty) */
         .glass-card {
-            /* Pozycjonowanie */
             position: relative;
-            padding: 40px;
+            padding: 50px 40px;
             border-radius: 20px;
             text-align: center;
             color: white;
-            width: 300px;
+            
+            /* Zwiększona szerokość i skalowanie */
+            width: 450px;
+            max-width: 85vw; /* Skaluje się do okna na mobile */
 
-            /* Wygląd "szkła" i ciemny motyw */
-            background: rgba(30, 30, 30, 0.65); /* Półprzezroczyste ciemne tło */
+            background: rgba(30, 30, 30, 0.65);
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(12px); /* To tworzy efekt rozmycia tła za kartą */
-            -webkit-backdrop-filter: blur(12px); /* Wsparcie dla Safari */
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s ease;
         }
 
-        /* Stylizacja zdjęcia profilowego */
+        .glass-card:hover {
+            transform: translateY(-5px);
+        }
+
         .profile-img {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%; /* Robi kółko */
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
             object-fit: cover;
             border: 3px solid rgba(255, 255, 255, 0.2);
             box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            margin-bottom: 20px;
+            margin-bottom: 25px;
         }
 
-        /* Stylizacja tekstu */
         h1 {
-            margin: 0 0 25px 0;
+            margin: 0 0 35px 0;
             font-weight: 400;
+            letter-spacing: 2px;
+            font-size: 2rem;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+
+        /* Stylizacja guzika */
+        .glass-btn {
+            display: block;
+            width: 100%;
+            padding: 15px 0;
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            text-decoration: none;
+            font-size: 1.1rem;
             letter-spacing: 1px;
-            font-size: 1.8rem;
-        }
-
-        /* Stylizacja pustego kwadratu */
-        .empty-square {
-            width: 150px;
-            height: 150px;
-            background: rgba(0, 0, 0, 0.4);
-            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.2);
             border-radius: 10px;
-            margin: 0 auto; /* Centrowanie w poziomie */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            color: rgba(255,255,255,0.3);
-            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            box-sizing: border-box;
+            cursor: pointer;
         }
 
+        .glass-btn:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+        }
     </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
 
     <div class="glass-card">
-        <img src="pfp.gif" alt="Profile Picture">
+        <img src="pfp.gif" alt="Profile Picture" class="profile-img">
         
         <h1>KanlorekDUH</h1>
         
-        <div class="empty-square">
-            Pusty kwadrat
-        </div>
+        <a href="https://kanlorekduh.github.io/aboutme" class="glass-btn">
+            About me
+        </a>
     </div>
 
-
     <script>
-        // SKRYPT ANIMACJI (Ten sam co poprzednio)
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
         
@@ -105,7 +114,7 @@
             particleColor: 'rgba(255, 255, 255, 0.8)',
             lineColor: 'rgba(255, 255, 255, 0.2)',
             particleAmount: 100,
-            defaultSpeed: 0.8, // Lekko zwolniłem dla lepszego efektu tła
+            defaultSpeed: 0.8,
             variantSpeed: 1,
             linkRadius: 130,
             mouseRadius: 150
@@ -137,7 +146,6 @@
                     if (distance < config.mouseRadius) {
                         const forceDirectionX = dx / distance;
                         const forceDirectionY = dy / distance;
-                        // Zwiększyłem siłę odpychania
                         const force = (config.mouseRadius - distance) / config.mouseRadius;
                         const directionX = forceDirectionX * force * 5;
                         const directionY = forceDirectionY * force * 5;
@@ -161,9 +169,8 @@
             height = canvas.height = window.innerHeight;
             
             particles = [];
-            // Dostosowanie ilości cząsteczek do rozdzielczości
             let amount = (width * height) / 10000; 
-            if (amount < 50) amount = 50; // Minimum cząsteczek
+            if (amount < 50) amount = 50;
 
             for (let i = 0; i < amount; i++) {
                 particles.push(new Particle());
@@ -184,7 +191,6 @@
 
                     if (distance < config.linkRadius) {
                         ctx.beginPath();
-                        // Dynamiczna przezroczystość linii w zależności od odległości
                         ctx.strokeStyle = `rgba(255, 255, 255, ${1 - distance/config.linkRadius})`;
                         ctx.lineWidth = 0.8;
                         ctx.moveTo(particles[i].x, particles[i].y);
