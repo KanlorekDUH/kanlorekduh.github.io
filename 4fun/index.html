@@ -2,170 +2,294 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Physics Stress Lab</title>
+<title>Bridge Constructor</title>
 <style>
-    body { margin: 0; background-color: #050505; overflow: hidden; font-family: 'Segoe UI', sans-serif; user-select: none; }
+    body { margin: 0; background-color: #0f1015; overflow: hidden; font-family: 'Segoe UI', sans-serif; user-select: none; }
     canvas { display: block; }
     #ui {
         position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-        display: flex; gap: 8px; background: rgba(20, 20, 20, 0.9); padding: 10px;
-        border-radius: 8px; border: 1px solid #333; box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        display: flex; flex-direction: column; gap: 8px; align-items: center;
+        pointer-events: none;
     }
+    .row { display: flex; gap: 8px; pointer-events: auto; }
     .btn {
-        background: #222; color: #aaa; border: 1px solid #444; padding: 10px 20px;
-        cursor: pointer; border-radius: 4px; font-weight: bold; min-width: 60px; text-align: center;
-        transition: 0.2s; text-transform: uppercase; font-size: 12px;
+        background: #25262b; color: #aaa; border: 1px solid #333; padding: 8px 16px;
+        cursor: pointer; border-radius: 4px; font-weight: 600; min-width: 50px; text-align: center;
+        transition: 0.1s; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;
     }
-    .btn.active { background: #d94e4e; color: #fff; border-color: #ff6b6b; box-shadow: 0 0 10px rgba(217, 78, 78, 0.4); }
-    .btn:hover:not(.active) { background: #333; }
-    #stats { position: absolute; top: 20px; left: 20px; color: #555; pointer-events: none; font-weight: bold; }
-    #paused-msg { color: #d94e4e; display: none; margin-left: 10px; }
+    .btn.active { background: #3b82f6; color: #fff; border-color: #60a5fa; box-shadow: 0 0 15px rgba(59, 130, 246, 0.4); }
+    .btn:hover:not(.active) { background: #333; color: #fff; }
+    
+    .mat-wood { border-bottom: 3px solid #8d6e63; }
+    .mat-steel { border-bottom: 3px solid #b0bec5; }
+    .mat-rope { border-bottom: 3px solid #eab308; }
+    .mat-road { border-bottom: 3px solid #444; }
+
+    #stats { position: absolute; top: 20px; left: 20px; color: #666; font-size: 14px; font-weight: bold; pointer-events: none; }
+    #controls { position: absolute; top: 20px; right: 20px; text-align: right; color: #444; font-size: 12px; pointer-events: none; }
+    span.key { color: #888; border: 1px solid #333; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }
 </style>
 </head>
 <body>
 
-<div id="stats">
-    Nodes: 0 | Beams: 0 
-    <span id="paused-msg">[PAUSED]</span>
+<div id="stats">Entities: 0 | Stress: 0%</div>
+<div id="controls">
+    Pause <span class="key">SPACE</span><br>
+    Delete <span class="key">R-CLICK</span>
 </div>
 
 <div id="ui">
-    <div class="btn active" onclick="setMode('BUILD')">Build</div>
-    <div class="btn" onclick="setMode('DRAG')">Drag</div>
-    <div class="btn" onclick="setMode('CUT')">Cut</div>
-    <div class="btn" onclick="setMode('BLAST')">Blast</div>
-    <div class="btn" onclick="reset()">Reset</div>
+    <div class="row">
+        <div class="btn active" onclick="setMode('BUILD')" id="btn-build">BUILD</div>
+        <div class="btn" onclick="setMode('DRAG')">DRAG</div>
+        <div class="btn" onclick="setMode('CAR')">CAR</div>
+        <div class="btn" onclick="setMode('WEIGHT')">WEIGHT</div>
+        <div class="btn" onclick="reset()">CLEAR</div>
+    </div>
+    <div class="row" id="mat-row">
+        <div class="btn mat-wood active" onclick="setMaterial('wood', this)">WOOD</div>
+        <div class="btn mat-steel" onclick="setMaterial('steel', this)">STEEL</div>
+        <div class="btn mat-rope" onclick="setMaterial('rope', this)">ROPE</div>
+        <div class="btn mat-road" onclick="setMaterial('road', this)">ROAD</div>
+    </div>
 </div>
+
 <canvas id="c"></canvas>
 
 <script>
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const stats = document.getElementById('stats');
-const pausedMsg = document.getElementById('paused-msg');
+const uiStats = document.getElementById('stats');
 
 let width, height;
 let points = [];
 let sticks = [];
+let vehicles = [];
 let mode = 'BUILD';
+let currentMat = 'wood';
+let isPaused = false;
 let isMouseDown = false;
 let dragPoint = null;
 let mouse = { x: 0, y: 0 };
-let isPaused = false; // Zmienna stanu pauzy
 
-const CFG = {
-    gravity: 0.5,
-    friction: 0.99,
-    groundBounce: 0.5,
-    stiffness: 5,
-    breakThreshold: 120, 
-    snapDistance: 15
+const MATS = {
+    wood:  { color: '#8d6e63', width: 4, strength: 100, stiff: 1.0, weight: 1.0 },
+    steel: { color: '#cfd8dc', width: 6, strength: 500, stiff: 1.0, weight: 2.0 },
+    rope:  { color: '#eab308', width: 2, strength: 150, stiff: 0.1, weight: 0.5 },
+    road:  { color: '#333333', width: 10, strength: 400, stiff: 1.0, weight: 3.0 }
 };
 
-// Obsługa Spacji
-window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space') {
-        isPaused = !isPaused;
-        pausedMsg.style.display = isPaused ? 'inline' : 'none';
-    }
-});
+const PHYS = {
+    gravity: 0.5,
+    friction: 0.99,
+    groundBounce: 0.3,
+    snap: 15
+};
 
 class Point {
-    constructor(x, y, pinned = false) {
+    constructor(x, y, pinned = false, mass = 1) {
         this.x = x;
         this.y = y;
         this.oldx = x;
         this.oldy = y;
         this.pinned = pinned;
+        this.mass = mass;
     }
 
     update() {
         if (this.pinned) return;
-        
-        const vx = (this.x - this.oldx) * CFG.friction;
-        const vy = (this.y - this.oldy) * CFG.friction;
-
+        const vx = (this.x - this.oldx) * PHYS.friction;
+        const vy = (this.y - this.oldy) * PHYS.friction;
         this.oldx = this.x;
         this.oldy = this.y;
-
         this.x += vx;
-        this.y += vy + CFG.gravity;
+        this.y += vy + PHYS.gravity * this.mass;
 
-        if (this.y > height) {
-            this.y = height;
-            this.oldy = this.y + vy * CFG.groundBounce;
-        }
-        if (this.x > width) {
-            this.x = width;
-            this.oldx = this.x + vx * CFG.groundBounce;
-        } else if (this.x < 0) {
-            this.x = 0;
-            this.oldx = this.x + vx * CFG.groundBounce;
-        }
+        if (this.y > height) { this.y = height; this.oldy = this.y + vy * PHYS.groundBounce; }
+        if (this.x > width) { this.x = width; this.oldx = this.x + vx * PHYS.groundBounce; }
+        else if (this.x < 0) { this.x = 0; this.oldx = this.x + vx * PHYS.groundBounce; }
     }
 
     draw() {
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.pinned ? 4 : 2, 0, Math.PI * 2);
-        ctx.fillStyle = this.pinned ? '#d94e4e' : '#fff';
+        ctx.arc(this.x, this.y, this.pinned ? 5 : 3, 0, Math.PI*2);
+        ctx.fillStyle = this.pinned ? '#ef4444' : '#fff';
         ctx.fill();
     }
 }
 
 class Stick {
-    constructor(p1, p2) {
+    constructor(p1, p2, type) {
         this.p1 = p1;
         this.p2 = p2;
-        this.length = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        this.type = type;
+        this.len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
         this.active = true;
         this.stress = 0;
+        
+        const m = MATS[type];
+        if(!p1.pinned) p1.mass += m.weight;
+        if(!p2.pinned) p2.mass += m.weight;
     }
 
     update() {
         if (!this.active) return;
-        
         const dx = this.p2.x - this.p1.x;
         const dy = this.p2.y - this.p1.y;
         const dist = Math.hypot(dx, dy);
-        
-        // Zabezpieczenie przed dzieleniem przez zero
         if (dist === 0) return;
 
-        const diff = this.length - dist;
-        const percent = diff / dist / 2;
-        const offsetX = dx * percent;
-        const offsetY = dy * percent;
-
+        const diff = this.len - dist;
         this.stress = Math.abs(diff);
 
-        if (this.stress > CFG.breakThreshold) {
+        if (this.stress > MATS[this.type].strength) {
             this.active = false;
             return;
         }
 
-        if (!this.p1.pinned) {
-            this.p1.x -= offsetX;
-            this.p1.y -= offsetY;
-        }
-        if (!this.p2.pinned) {
-            this.p2.x += offsetX;
-            this.p2.y += offsetY;
-        }
+        const percent = (diff / dist) * 0.5 * MATS[this.type].stiff;
+        const ox = dx * percent;
+        const oy = dy * percent;
+
+        if (!this.p1.pinned) { this.p1.x -= ox; this.p1.y -= oy; }
+        if (!this.p2.pinned) { this.p2.x += ox; this.p2.y += oy; }
     }
 
     draw() {
         if (!this.active) return;
-        
-        const stressRatio = Math.min(this.stress / CFG.breakThreshold, 1);
-        const r = Math.floor(255 * stressRatio + 50);
-        const gb = Math.floor(255 * (1 - stressRatio));
+        const m = MATS[this.type];
+        const strRatio = Math.min(this.stress / m.strength, 1);
         
         ctx.beginPath();
         ctx.moveTo(this.p1.x, this.p1.y);
         ctx.lineTo(this.p2.x, this.p2.y);
-        ctx.strokeStyle = `rgb(${r},${gb},${gb})`;
-        ctx.lineWidth = 1 + stressRatio * 2;
+        
+        let r, g, b;
+        if (strRatio > 0.5) {
+            r = 255; g = 255 * (1 - strRatio) * 2; b = 0;
+        } else {
+            ctx.strokeStyle = m.color;
+        }
+        
+        if(strRatio > 0.5) ctx.strokeStyle = `rgb(${r},${g},${b})`;
+        else ctx.strokeStyle = m.color;
+
+        ctx.lineWidth = m.width;
+        ctx.lineCap = 'round';
         ctx.stroke();
+    }
+}
+
+class Car {
+    constructor(x, y) {
+        this.w1 = new Point(x - 20, y, false, 5);
+        this.w2 = new Point(x + 20, y, false, 5);
+        this.body = new Point(x, y - 20, false, 5);
+        this.parts = [this.w1, this.w2, this.body];
+        
+        this.axles = [];
+        this.axles.push(new Stick(this.w1, this.w2, 'steel'));
+        this.axles.push(new Stick(this.w1, this.body, 'steel'));
+        this.axles.push(new Stick(this.w2, this.body, 'steel'));
+        
+        this.speed = 3;
+    }
+
+    update() {
+        this.parts.forEach(p => p.update());
+        this.axles.forEach(s => s.update());
+        
+        [this.w1, this.w2].forEach(wheel => {
+            sticks.forEach(road => {
+                if (road.type !== 'road' || !road.active) return;
+                
+                const rx = road.p2.x - road.p1.x;
+                const ry = road.p2.y - road.p1.y;
+                const len2 = rx*rx + ry*ry;
+                let t = ((wheel.x - road.p1.x) * rx + (wheel.y - road.p1.y) * ry) / len2;
+                t = Math.max(0, Math.min(1, t));
+                
+                const cx = road.p1.x + t * rx;
+                const cy = road.p1.y + t * ry;
+                
+                const dist = Math.hypot(wheel.x - cx, wheel.y - cy);
+                
+                if (dist < 15) {
+                    const nx = -ry;
+                    const ny = rx;
+                    const nLen = Math.hypot(nx, ny);
+                    
+                    const pushX = (nx / nLen) * (15 - dist);
+                    const pushY = (ny / nLen) * (15 - dist);
+
+                    wheel.x += pushX;
+                    wheel.y += pushY;
+                    
+                    wheel.x += (rx/Math.sqrt(len2)) * this.speed;
+                    wheel.y += (ry/Math.sqrt(len2)) * this.speed;
+
+                    const force = 0.5;
+                    if(!road.p1.pinned) { road.p1.x -= pushX * (1-t) * force; road.p1.y -= pushY * (1-t) * force; }
+                    if(!road.p2.pinned) { road.p2.x -= pushX * t * force; road.p2.y -= pushY * t * force; }
+                }
+            });
+        });
+    }
+
+    draw() {
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.moveTo(this.w1.x, this.w1.y);
+        ctx.lineTo(this.body.x, this.body.y);
+        ctx.lineTo(this.w2.x, this.w2.y);
+        ctx.fill();
+        
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(this.w1.x, this.w1.y, 8, 0, Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(this.w2.x, this.w2.y, 8, 0, Math.PI*2); ctx.fill();
+    }
+}
+
+class Weight {
+    constructor(x, y) {
+        this.p = new Point(x, y, false, 20);
+        this.r = 15;
+    }
+    update() {
+        this.p.update();
+        sticks.forEach(s => {
+            if(!s.active) return;
+            const rx = s.p2.x - s.p1.x;
+            const ry = s.p2.y - s.p1.y;
+            const len2 = rx*rx + ry*ry;
+            let t = ((this.p.x - s.p1.x) * rx + (this.p.y - s.p1.y) * ry) / len2;
+            t = Math.max(0, Math.min(1, t));
+            
+            const cx = s.p1.x + t * rx;
+            const cy = s.p1.y + t * ry;
+            const dist = Math.hypot(this.p.x - cx, this.p.y - cy);
+            
+            if (dist < this.r + MATS[s.type].width/2) {
+                const nx = (this.p.x - cx) / dist;
+                const ny = (this.p.y - cy) / dist;
+                const push = (this.r + MATS[s.type].width/2 - dist);
+                
+                this.p.x += nx * push;
+                this.p.y += ny * push;
+                
+                const force = 0.8;
+                if(!s.p1.pinned) { s.p1.x -= nx * push * (1-t) * force; s.p1.y -= ny * push * (1-t) * force; }
+                if(!s.p2.pinned) { s.p2.x -= nx * push * t * force; s.p2.y -= ny * push * t * force; }
+            }
+        });
+    }
+    draw() {
+        ctx.fillStyle = '#3b82f6';
+        ctx.beginPath();
+        ctx.fillRect(this.p.x - 15, this.p.y - 15, 30, 30);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.2)';
+        ctx.fillRect(this.p.x - 15, this.p.y - 15, 30, 5);
     }
 }
 
@@ -176,191 +300,156 @@ function resize() {
     canvas.height = height;
 }
 
-function getClosestPoint(x, y, radius = 20) {
-    let closest = null;
-    let minDist = radius;
+function getClosestPoint(x, y, range = 20) {
+    let best = null;
+    let min = range;
     for (const p of points) {
         const d = Math.hypot(p.x - x, p.y - y);
-        if (d < minDist) {
-            minDist = d;
-            closest = p;
-        }
+        if (d < min) { min = d; best = p; }
     }
-    return closest;
+    return best;
 }
 
-function createBridge() {
-    points = [];
-    sticks = [];
-    isPaused = false;
-    pausedMsg.style.display = 'none';
-    
+window.setMode = (m) => {
+    mode = m;
+    document.querySelectorAll('#ui .row:first-child .btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+};
+
+window.setMaterial = (m, el) => {
+    currentMat = m;
+    document.querySelectorAll('.mat-row .btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.mat-' + m).forEach(b => b.classList.add('active'));
+};
+
+window.reset = () => { points = []; sticks = []; vehicles = []; createTerrain(); };
+
+function createTerrain() {
+    const gap = width * 0.6;
     const startX = width * 0.2;
-    const endX = width * 0.8;
-    const y = height * 0.4;
-    const segments = 15;
-    const step = (endX - startX) / segments;
-
-    let prevTop = null;
-    let prevBot = null;
-
-    for (let i = 0; i <= segments; i++) {
-        const px = startX + i * step;
-        const pinned = (i === 0 || i === segments);
-        
-        const pTop = new Point(px, y, pinned);
-        const pBot = new Point(px, y + 60, pinned);
-        
-        points.push(pTop, pBot);
-        sticks.push(new Stick(pTop, pBot));
-
-        if (prevTop) {
-            sticks.push(new Stick(prevTop, pTop));
-            sticks.push(new Stick(prevBot, pBot));
-            sticks.push(new Stick(prevTop, pBot)); 
-            sticks.push(new Stick(prevBot, pTop)); 
-        }
-
-        prevTop = pTop;
-        prevBot = pBot;
-    }
+    const y = height * 0.6;
+    
+    const p1 = new Point(startX, y, true);
+    const p2 = new Point(startX + gap, y, true);
+    points.push(p1, p2);
 }
 
 window.addEventListener('resize', resize);
-window.setMode = (m) => {
-    mode = m;
-    document.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
-    event.target.classList.add('active');
-};
-window.reset = createBridge;
+window.addEventListener('keydown', e => { if(e.code === 'Space') isPaused = !isPaused; });
 
 canvas.addEventListener('mousedown', e => {
     isMouseDown = true;
     mouse.x = e.clientX;
     mouse.y = e.clientY;
-
-    if (mode === 'DRAG') {
-        dragPoint = getClosestPoint(mouse.x, mouse.y, 50);
-        // Reset prędkości przy łapaniu, żeby nie wystrzeliło po puszczeniu pauzy
-        if(dragPoint) {
-            dragPoint.oldx = dragPoint.x;
-            dragPoint.oldy = dragPoint.y;
+    
+    if (e.button === 2) {
+        const p = getClosestPoint(mouse.x, mouse.y, 30);
+        if(p && !p.pinned) {
+            points = points.filter(pt => pt !== p);
+            sticks = sticks.filter(s => s.p1 !== p && s.p2 !== p);
+            return;
         }
+        sticks.forEach(s => {
+            const cx = (s.p1.x + s.p2.x)/2;
+            const cy = (s.p1.y + s.p2.y)/2;
+            if(Math.hypot(cx - mouse.x, cy - mouse.y) < 20) s.active = false;
+        });
+        vehicles = vehicles.filter(v => {
+            if(v instanceof Car) return Math.hypot(v.body.x - mouse.x, v.body.y - mouse.y) > 40;
+            return Math.hypot(v.p.x - mouse.x, v.p.y - mouse.y) > 40;
+        });
+        return;
+    }
+
+    if (mode === 'CAR') {
+        vehicles.push(new Car(mouse.x, mouse.y));
+    } else if (mode === 'WEIGHT') {
+        vehicles.push(new Weight(mouse.x, mouse.y));
+    } else if (mode === 'DRAG') {
+        dragPoint = getClosestPoint(mouse.x, mouse.y, 50);
+        if(dragPoint) { dragPoint.oldx = dragPoint.x; dragPoint.oldy = dragPoint.y; }
     } else if (mode === 'BUILD') {
-        const existing = getClosestPoint(mouse.x, mouse.y, CFG.snapDistance);
-        if (!existing) {
-            const p = new Point(mouse.x, mouse.y, false);
+        const existing = getClosestPoint(mouse.x, mouse.y, PHYS.snap);
+        if (existing) {
+            dragPoint = existing;
+        } else {
+            const p = new Point(mouse.x, mouse.y);
             points.push(p);
             dragPoint = p;
-        } else {
-            dragPoint = existing;
         }
-    } else if (mode === 'BLAST') {
-        points.forEach(p => {
-            const dx = p.x - mouse.x;
-            const dy = p.y - mouse.y;
-            const dist = Math.hypot(dx, dy);
-            if (dist < 200) {
-                const force = (200 - dist) * 0.5;
-                p.oldx -= (dx / dist) * force;
-                p.oldy -= (dy / dist) * force;
-            }
-        });
-    } else if (mode === 'CUT') {
-        sticks.forEach(s => {
-            const cx = (s.p1.x + s.p2.x) / 2;
-            const cy = (s.p1.y + s.p2.y) / 2;
-            if (Math.hypot(cx - mouse.x, cy - mouse.y) < 20) {
-                s.active = false;
-            }
-        });
     }
 });
 
 canvas.addEventListener('mousemove', e => {
-    const mx = e.clientX;
-    const my = e.clientY;
-    
+    mouse.x = e.clientX;
+    mouse.y = e.clientY;
     if (isMouseDown && mode === 'DRAG' && dragPoint) {
-        dragPoint.x = mx;
-        dragPoint.y = my;
-        // W trybie pauzy aktualizujemy też oldx/oldy, żeby obiekt nie wystrzelił po wznowieniu
-        if (isPaused) {
-            dragPoint.oldx = mx;
-            dragPoint.oldy = my;
-        }
+        dragPoint.x = mouse.x;
+        dragPoint.y = mouse.y;
+        dragPoint.oldx = mouse.x;
+        dragPoint.oldy = mouse.y;
     }
-    
-    mouse.x = mx;
-    mouse.y = my;
 });
 
 canvas.addEventListener('mouseup', e => {
     if (mode === 'BUILD' && dragPoint) {
-        const target = getClosestPoint(e.clientX, e.clientY, CFG.snapDistance);
+        const target = getClosestPoint(e.clientX, e.clientY, PHYS.snap);
         if (target && target !== dragPoint) {
-            sticks.push(new Stick(dragPoint, target));
+            sticks.push(new Stick(dragPoint, target, currentMat));
         } else if (!target) {
             const p = new Point(e.clientX, e.clientY);
             points.push(p);
-            sticks.push(new Stick(dragPoint, p));
+            sticks.push(new Stick(dragPoint, p, currentMat));
         }
     }
     isMouseDown = false;
     dragPoint = null;
 });
 
-canvas.addEventListener('contextmenu', e => {
-    e.preventDefault();
-    const p = getClosestPoint(e.clientX, e.clientY);
-    if (p) p.pinned = !p.pinned;
-});
+canvas.addEventListener('contextmenu', e => e.preventDefault());
 
 function update() {
-    // Jeśli PAUZA, pomijamy obliczenia fizyki
-    if (!isPaused) {
+    if(!isPaused) {
         points.forEach(p => p.update());
-        for(let i=0; i<5; i++) {
+        for(let i=0; i<3; i++) {
             sticks.forEach(s => s.update());
+            vehicles.forEach(v => v.update());
         }
     }
-    // Zawsze usuwamy zniszczone belki
     sticks = sticks.filter(s => s.active);
 }
 
 function draw() {
-    ctx.fillStyle = '#050505';
+    ctx.fillStyle = '#0f1015';
     ctx.fillRect(0, 0, width, height);
 
-    ctx.strokeStyle = '#222';
+    ctx.strokeStyle = '#1e1e24';
     ctx.lineWidth = 1;
     ctx.beginPath();
     for(let i=0; i<width; i+=40) { ctx.moveTo(i,0); ctx.lineTo(i,height); }
     for(let i=0; i<height; i+=40) { ctx.moveTo(0,i); ctx.lineTo(width,i); }
     ctx.stroke();
 
-    sticks.forEach(s => s.draw());
+    sticks.forEach(s => { if(s.type === 'road') s.draw(); });
+    sticks.forEach(s => { if(s.type !== 'road') s.draw(); });
+    
     points.forEach(p => p.draw());
+    vehicles.forEach(v => v.draw());
 
     if (isMouseDown && mode === 'BUILD' && dragPoint) {
         ctx.beginPath();
         ctx.moveTo(dragPoint.x, dragPoint.y);
         ctx.lineTo(mouse.x, mouse.y);
-        ctx.strokeStyle = '#555';
+        ctx.strokeStyle = MATS[currentMat].color;
+        ctx.lineWidth = 2;
         ctx.setLineDash([5, 5]);
         ctx.stroke();
         ctx.setLineDash([]);
     }
 
-    if (mode === 'BLAST') {
-        ctx.beginPath();
-        ctx.arc(mouse.x, mouse.y, 30, 0, Math.PI*2);
-        ctx.strokeStyle = 'rgba(255, 100, 100, 0.5)';
-        ctx.stroke();
-    }
-    
-    // Aktualizacja licznika
-    stats.innerHTML = `Nodes: ${points.length} | Beams: ${sticks.length} <span id="paused-msg" style="display:${isPaused ? 'inline' : 'none'}; color:#d94e4e; margin-left:10px;">[PAUSED]</span>`;
+    let maxStress = 0;
+    sticks.forEach(s => maxStress = Math.max(maxStress, s.stress / MATS[s.type].strength));
+    uiStats.innerHTML = `Entities: ${points.length + sticks.length} | Max Stress: ${Math.round(maxStress*100)}% ${isPaused ? '<span style="color:#ef4444; margin-left:10px">PAUSED</span>' : ''}`;
 }
 
 function loop() {
@@ -370,7 +459,7 @@ function loop() {
 }
 
 resize();
-createBridge();
+createTerrain();
 loop();
 </script>
 </body>
