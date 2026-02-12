@@ -19,12 +19,12 @@
 
         <aside class="sidebar">
             <header class="sidebar-header" id="sidebar-header">
-                <span>Znajomi</span>
+                <span id="sidebar-title">Znajomi</span>
             </header>
+            
             <div class="channel-list" id="channel-list">
-                <div class="friends-nav-item active">Wszyscy</div>
-                <div class="friends-nav-item">Dostępni</div>
-            </div>
+                </div>
+
             <div class="user-area">
                 <img src="" id="current-user-avatar" class="avatar-medium">
                 <div class="user-info">
@@ -41,8 +41,13 @@
 
         <main class="chat-area">
             <header class="chat-header">
-                <span class="chat-header-symbol" id="header-symbol">@</span>
-                <span class="chat-header-name" id="header-name">Strona Główna</span>
+                <div class="header-left">
+                    <span class="chat-header-symbol" id="header-symbol">@</span>
+                    <span class="chat-header-name" id="header-name">Strona Główna</span>
+                </div>
+                
+                <button id="top-add-friend-btn" class="top-add-friend-btn" style="display: none;">Dodaj znajomego</button>
+
                 <div class="header-icons">
                     <button class="call-btn" id="voice-call-btn" style="display:none;">📞</button>
                     <button class="call-btn" id="video-call-btn" style="display:none;">📹</button>
@@ -50,11 +55,7 @@
             </header>
             
             <div class="messages-container" id="messages-list">
-                <div class="empty-state">
-                    <h3>Witaj!</h3>
-                    <p>Dodaj znajomego lub stwórz serwer, aby zacząć.</p>
                 </div>
-            </div>
 
             <div class="input-area" id="input-area" style="display:none;">
                 <div class="input-wrapper">
@@ -75,16 +76,16 @@
                 <div class="settings-tab active" data-tab="profile">Profil</div>
                 <div class="settings-tab" data-tab="audio">Głos i wideo</div>
                 <div class="settings-separator"></div>
-                <div class="settings-tab close-settings">Zamknij</div>
+                <div class="settings-tab close-settings" id="close-settings-btn">Zamknij</div>
             </div>
             <div class="settings-view">
                 <div class="tab-content active" id="tab-profile">
                     <h2>Mój profil</h2>
                     <div class="profile-card">
-                        <div class="profile-header"></div>
+                        <div class="profile-header-bg"></div>
                         <div class="profile-avatar-upload">
                             <img id="settings-avatar-preview" src="">
-                            <button class="change-avatar-btn">Zmień avatar</button>
+                            <button class="change-avatar-btn" id="change-avatar-trigger">Zmień avatar</button>
                             <input type="file" id="avatar-upload" hidden accept="image/*">
                         </div>
                         <div class="profile-details">
@@ -93,7 +94,7 @@
                                 <input type="text" id="settings-username-input">
                                 <span class="input-discriminator" id="settings-discriminator">#0000</span>
                             </div>
-                            <label>IDENTYFIKATOR</label>
+                            <label style="margin-top: 15px;">IDENTYFIKATOR</label>
                             <div class="id-display" id="settings-id-display"></div>
                         </div>
                     </div>
@@ -101,20 +102,16 @@
                 <div class="tab-content" id="tab-audio">
                     <h2>Ustawienia głosu</h2>
                     <div class="audio-group">
-                        <label>URZĄDZENIE WEJŚCIOWE (MIKROFON)</label>
+                        <label>URZĄDZENIE WEJŚCIOWE</label>
                         <select id="audio-input-device" class="discord-select"></select>
                     </div>
-                    <div class="audio-group">
-                        <label>URZĄDZENIE WYJŚCIOWE (SŁUCHAWKI)</label>
-                        <select id="audio-output-device" class="discord-select"></select>
-                    </div>
                     <div class="mic-test">
-                        <p>Sprawdź mikrofon</p>
+                        <p>Test mikrofonu</p>
                         <div class="mic-bar"><div class="mic-level"></div></div>
                     </div>
                 </div>
             </div>
-            <button class="close-btn-abs">✕</button>
+            <button class="close-btn-abs" id="close-settings-x">✕</button>
         </div>
     </div>
 
@@ -124,7 +121,7 @@
             <p>Twój serwer to miejsce, gdzie spotkasz się ze znajomymi.</p>
             <div class="server-input-group">
                 <label>NAZWA SERWERA</label>
-                <input type="text" id="new-server-name" placeholder="Mój super serwer">
+                <input type="text" id="new-server-name" placeholder="Mój serwer">
             </div>
             <div class="modal-actions">
                 <button class="btn-cancel" id="close-server-modal">Anuluj</button>
