@@ -9,88 +9,144 @@
 </head>
 <body>
     <div class="app-container">
-        <nav class="server-list">
-            <div class="server-icon home-icon">
+        <nav class="server-list" id="server-list">
+            <div class="server-icon home-icon active" id="home-button">
                 <img src="https://assets-global.website-files.com/6257adef93867e56f84d3092/636e0a6a49cf127bf92de1e2_icon_clyde_blurple_RGB.png" alt="Home">
             </div>
             <div class="server-separator"></div>
-            <div class="server-icon">
-                <img src="https://ui-avatars.com/api/?name=S&background=random" alt="Server">
-            </div>
-            <div class="server-icon">
-                <img src="https://ui-avatars.com/api/?name=G&background=random" alt="Server">
-            </div>
-            <div class="server-icon add-server">+</div>
+            <div class="server-icon add-server" id="add-server-btn">+</div>
         </nav>
 
         <aside class="sidebar">
-            <header class="sidebar-header">
-                <span>Wiadomości prywatne</span>
+            <header class="sidebar-header" id="sidebar-header">
+                <span>Znajomi</span>
             </header>
-            <div class="channel-list">
-                <div class="channel-item active">
-                    <img src="https://ui-avatars.com/api/?name=Kosa&background=random" class="avatar-small">
-                    <span class="channel-name">Kosa</span>
-                </div>
-                <div class="channel-item">
-                    <img src="https://ui-avatars.com/api/?name=BoyKisser&background=random" class="avatar-small">
-                    <span class="channel-name">BoyKisser</span>
-                </div>
-                <div class="channel-item">
-                    <img src="https://ui-avatars.com/api/?name=Marek&background=random" class="avatar-small">
-                    <span class="channel-name">Marek20119</span>
-                </div>
+            <div class="channel-list" id="channel-list">
+                <div class="friends-nav-item active">Wszyscy</div>
+                <div class="friends-nav-item">Dostępni</div>
             </div>
-            <div class="user-area" id="user-settings-trigger">
-                <img src="https://ui-avatars.com/api/?name=Ty&background=2f3136&color=fff" id="current-user-avatar" class="avatar-medium">
+            <div class="user-area">
+                <img src="" id="current-user-avatar" class="avatar-medium">
                 <div class="user-info">
-                    <span class="username" id="current-username">Użytkownik</span>
-                    <span class="discriminator">#0001</span>
+                    <span class="username" id="current-username">User</span>
+                    <span class="discriminator" id="current-discriminator">#0000</span>
                 </div>
-                <div class="user-controls">🎤 🎧 ⚙️</div>
+                <div class="user-controls">
+                    <button class="control-btn" id="mic-mute">🎤</button>
+                    <button class="control-btn">🎧</button>
+                    <button class="control-btn" id="settings-btn">⚙️</button>
+                </div>
             </div>
         </aside>
 
         <main class="chat-area">
             <header class="chat-header">
-                <span class="chat-header-symbol">@</span>
-                <span class="chat-header-name">Kosa</span>
-                <div class="header-icons">📞 📹 📌 👤 🔎</div>
+                <span class="chat-header-symbol" id="header-symbol">@</span>
+                <span class="chat-header-name" id="header-name">Strona Główna</span>
+                <div class="header-icons">
+                    <button class="call-btn" id="voice-call-btn" style="display:none;">📞</button>
+                    <button class="call-btn" id="video-call-btn" style="display:none;">📹</button>
+                </div>
             </header>
             
             <div class="messages-container" id="messages-list">
-                <div class="message">
-                    <img src="https://ui-avatars.com/api/?name=Kosa&background=random" class="avatar-message">
-                    <div class="message-content">
-                        <div class="message-header">
-                            <span class="message-author">Kosa</span>
-                            <span class="message-time">Dzisiaj o 14:30</span>
-                        </div>
-                        <div class="message-text">Nie przeszkadzać</div>
-                    </div>
+                <div class="empty-state">
+                    <h3>Witaj!</h3>
+                    <p>Dodaj znajomego lub stwórz serwer, aby zacząć.</p>
                 </div>
             </div>
 
-            <div class="input-area">
+            <div class="input-area" id="input-area" style="display:none;">
                 <div class="input-wrapper">
                     <button class="attach-btn">+</button>
-                    <input type="text" id="message-input" placeholder="Napisz do @Kosa">
-                    <div class="input-icons">🎁 GIF 😊</div>
+                    <input type="text" id="message-input" placeholder="Napisz wiadomość">
                 </div>
             </div>
         </main>
 
-        <aside class="members-sidebar">
-            <div class="members-group">Dostępni - 1</div>
-            <div class="member-item">
-                <img src="https://ui-avatars.com/api/?name=Kosa&background=random" class="avatar-small status-online">
-                <div class="member-info">
-                    <span class="member-name">Kosa</span>
-                    <span class="member-status">Nie przeszkadzać</span>
-                </div>
-            </div>
+        <aside class="members-sidebar" id="members-sidebar">
+            <div class="members-group">Znajomi - 0</div>
         </aside>
     </div>
+
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal-content settings-window">
+            <div class="settings-sidebar">
+                <div class="settings-tab active" data-tab="profile">Profil</div>
+                <div class="settings-tab" data-tab="audio">Głos i wideo</div>
+                <div class="settings-separator"></div>
+                <div class="settings-tab close-settings">Zamknij</div>
+            </div>
+            <div class="settings-view">
+                <div class="tab-content active" id="tab-profile">
+                    <h2>Mój profil</h2>
+                    <div class="profile-card">
+                        <div class="profile-header"></div>
+                        <div class="profile-avatar-upload">
+                            <img id="settings-avatar-preview" src="">
+                            <button class="change-avatar-btn">Zmień avatar</button>
+                            <input type="file" id="avatar-upload" hidden accept="image/*">
+                        </div>
+                        <div class="profile-details">
+                            <label>NAZWA UŻYTKOWNIKA</label>
+                            <div class="input-group">
+                                <input type="text" id="settings-username-input">
+                                <span class="input-discriminator" id="settings-discriminator">#0000</span>
+                            </div>
+                            <label>IDENTYFIKATOR</label>
+                            <div class="id-display" id="settings-id-display"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="tab-content" id="tab-audio">
+                    <h2>Ustawienia głosu</h2>
+                    <div class="audio-group">
+                        <label>URZĄDZENIE WEJŚCIOWE (MIKROFON)</label>
+                        <select id="audio-input-device" class="discord-select"></select>
+                    </div>
+                    <div class="audio-group">
+                        <label>URZĄDZENIE WYJŚCIOWE (SŁUCHAWKI)</label>
+                        <select id="audio-output-device" class="discord-select"></select>
+                    </div>
+                    <div class="mic-test">
+                        <p>Sprawdź mikrofon</p>
+                        <div class="mic-bar"><div class="mic-level"></div></div>
+                    </div>
+                </div>
+            </div>
+            <button class="close-btn-abs">✕</button>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="server-modal">
+        <div class="modal-content server-create">
+            <h2>Stwórz serwer</h2>
+            <p>Twój serwer to miejsce, gdzie spotkasz się ze znajomymi.</p>
+            <div class="server-input-group">
+                <label>NAZWA SERWERA</label>
+                <input type="text" id="new-server-name" placeholder="Mój super serwer">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="close-server-modal">Anuluj</button>
+                <button class="btn-primary" id="create-server-confirm">Stwórz</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="friend-modal">
+        <div class="modal-content friend-add">
+            <h2>Dodaj znajomego</h2>
+            <p>Wpisz tag Discorda (np. User#1234)</p>
+            <div class="server-input-group">
+                <input type="text" id="friend-id-input" placeholder="User#1234">
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="close-friend-modal">Anuluj</button>
+                <button class="btn-primary" id="add-friend-confirm">Wyślij zaproszenie</button>
+            </div>
+        </div>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>
