@@ -2,62 +2,105 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Multiplayer Canvas</title>
+    <title>Multiplayer Pixel Art</title>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
-        #canvas-container { width: 100vw; height: 100vh; overflow: auto; cursor: crosshair; }
-        canvas { background: white; display: block; image-rendering: pixelated; }
-        .controls { position: fixed; top: 10px; left: 10px; background: white; padding: 10px; border-radius: 5px; }
+        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: sans-serif; }
+        canvas { background: white; image-rendering: pixelated; cursor: none; }
+        .controls { position: fixed; top: 10px; left: 10px; background: white; padding: 10px; border-radius: 8px; z-index: 10; }
+        .cursor {
+            position: absolute;
+            pointer-events: none;
+            font-size: 12px;
+            white-space: nowrap;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+        }
+        .cursor-dot {
+            width: 6px;
+            height: 6px;
+            background: red;
+            border-radius: 50%;
+        }
     </style>
 </head>
 <body>
 
 <div class="controls">
     <input type="color" id="colorPicker" value="#000000">
-    <button onclick="resetZoom()">Reset Zoom</button>
-    <p>Zoom: Rolka myszy | Rysuj: Kliknij</p>
+    <span id="userNameDisplay"></span>
 </div>
 
-<div id="canvas-container">
-    <canvas id="paintCanvas" width="1024" height="2048"></canvas>
-</div>
+<canvas id="canvas" width="1024" height="2048"></canvas>
+<div id="cursors"></div>
 
 <script>
-    const canvas = document.getElementById('paintCanvas');
+    const firebaseConfig = {
+        apiKey: "TWOJE_API_KEY",
+        authDomain: "TWOJ_PROJEKT.firebaseapp.com",
+        databaseURL: "https://TWOJ_PROJEKT.firebaseio.com",
+        projectId: "TWOJ_PROJEKT",
+        storageBucket: "TWOJ_PROJEKT.appspot.com",
+        messagingSenderId: "ID",
+        appId: "APP_ID"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    
+    const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const colorPicker = document.getElementById('colorPicker');
-    let scale = 1;
+    const cursorsLayer = document.getElementById('cursors');
+    
+    const userName = prompt("Podaj swój nick:") || "Anon" + Math.floor(Math.random() * 1000);
+    const userId = Math.random().toString(36).substring(7);
+    document.getElementById('userNameDisplay').innerText = "Grasz jako: " + userName;
 
-    function draw(e) {
-        const rect = canvas.getBoundingClientRect();
-        const x = Math.floor((e.clientX - rect.left) / scale);
-        const y = Math.floor((e.clientY - rect.top) / scale);
+    const userRef = db.ref('users/' + userId);
+    userRef.onDisconnect().remove();
 
-        ctx.fillStyle = colorPicker.value;
+    db.ref('pixels').on('child_added', (snap) => {
+        const [x, y] = snap.key.split('_');
+        ctx.fillStyle = snap.val();
         ctx.fillRect(x, y, 1, 1);
-    }
+    });
+
+    db.ref('pixels').on('child_changed', (snap) => {
+        const [x, y] = snap.key.split('_');
+        ctx.fillStyle = snap.val();
+        ctx.fillRect(x, y, 1, 1);
+    });
 
     canvas.addEventListener('mousedown', (e) => {
-        draw(e);
-        canvas.addEventListener('mousemove', draw);
+        const x = Math.floor(e.clientX);
+        const y = Math.floor(e.clientY);
+        db.ref('pixels/' + x + '_' + y).set(colorPicker.value);
     });
 
-    window.addEventListener('mouseup', () => {
-        canvas.removeEventListener('mousemove', draw);
+    window.addEventListener('mousemove', (e) => {
+        userRef.set({
+            x: e.clientX,
+            y: e.clientY,
+            name: userName
+        });
     });
 
-    window.addEventListener('wheel', (e) => {
-        e.preventDefault();
-        const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        scale *= delta;
-        canvas.style.transform = `scale(${scale})`;
-        canvas.style.transformOrigin = "0 0";
-    }, { passive: false });
-
-    function resetZoom() {
-        scale = 1;
-        canvas.style.transform = `scale(1)`;
-    }
+    db.ref('users').on('value', (snap) => {
+        cursorsLayer.innerHTML = '';
+        const users = snap.val();
+        for (let id in users) {
+            if (id === userId) continue;
+            const u = users[id];
+            const div = document.createElement('div');
+            div.className = 'cursor';
+            div.style.left = u.x + 'px';
+            div.style.top = u.y + 'px';
+            div.innerHTML = `<div class="cursor-dot"></div> ${u.name}`;
+            cursorsLayer.appendChild(div);
+        }
+    });
 </script>
 
 </body>
