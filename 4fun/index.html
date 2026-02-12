@@ -2,33 +2,45 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Pixel Art Pro - Multiplayer</title>
+    <title>Pixel Art Studio Pro</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #121212; font-family: sans-serif; }
+        body { margin: 0; overflow: hidden; background: #0f0f0f; font-family: 'Inter', sans-serif; color: #fff; }
         #viewport { width: 100vw; height: 100vh; position: relative; overflow: hidden; }
         canvas { 
             background: white; 
             image-rendering: pixelated; 
             position: absolute;
             transform-origin: 0 0;
-            box-shadow: 0 0 100px rgba(0,0,0,0.8);
+            box-shadow: 0 0 80px rgba(0,0,0,0.9);
         }
         .ui { 
-            position: fixed; top: 15px; left: 15px; z-index: 10;
-            background: rgba(255, 255, 255, 0.95); padding: 12px;
-            border-radius: 10px; display: flex; gap: 15px; align-items: center;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.4);
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 100;
+            background: rgba(30, 30, 30, 0.95); padding: 10px 25px;
+            border-radius: 50px; display: flex; gap: 20px; align-items: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid #444;
         }
-        .tool-group { display: flex; gap: 5px; border-right: 1px solid #ccc; padding-right: 15px; }
-        button { padding: 8px 12px; cursor: pointer; border: 1px solid #ccc; border-radius: 5px; background: white; }
-        button.active { background: #007bff; color: white; }
-        input[type="range"] { width: 80px; }
-        label { font-size: 12px; font-weight: bold; }
-        .other-cursor { position: absolute; pointer-events: none; z-index: 5; font-size: 11px; color: white; text-shadow: 1px 1px 2px black; }
-        .dot { width: 4px; height: 4px; background: red; border-radius: 50%; }
-        #info { position: fixed; bottom: 15px; left: 15px; color: #aaa; font-size: 11px; pointer-events: none; }
+        .tool-group { display: flex; gap: 8px; align-items: center; }
+        button { 
+            padding: 8px 15px; cursor: pointer; border: none; border-radius: 20px; 
+            background: #333; color: white; transition: 0.2s; font-size: 13px;
+        }
+        button:hover { background: #444; }
+        button.active { background: #007bff; box-shadow: 0 0 10px rgba(0,123,255,0.5); }
+        input[type="color"] { border: none; width: 30px; height: 30px; cursor: pointer; background: none; }
+        
+        input[type="range"] {
+            -webkit-appearance: none; width: 100px; height: 4px; background: #555; border-radius: 5px; outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 16px; height: 16px; background: #007bff; border-radius: 50%; cursor: pointer; transition: 0.2s;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+        .other-cursor { position: absolute; pointer-events: none; z-index: 50; font-size: 10px; text-shadow: 1px 1px 1px #000; }
+        .dot { width: 4px; height: 4px; background: #ff4757; border-radius: 50%; }
+        #footer { position: fixed; bottom: 15px; width: 100%; text-align: center; font-size: 11px; color: #666; pointer-events: none; }
     </style>
 </head>
 <body>
@@ -37,20 +49,23 @@
     <div class="tool-group">
         <button id="penBtn" class="active" onclick="setTool('pen')">Ołówek</button>
         <button id="eraBtn" onclick="setTool('eraser')">Gumka</button>
+        <button id="fillBtn" onclick="setTool('fill')">Wiadro</button>
     </div>
     <div class="tool-group">
-        <label>Kolor:</label>
         <input type="color" id="colorPicker" value="#000000">
     </div>
     <div class="tool-group">
-        <label>Rozmiar:</label>
-        <input type="range" id="sizePicker" min="1" max="10" value="1">
-        <span id="sizeVal">1px</span>
+        <label style="font-size:12px">Rozmiar:</label>
+        <input type="range" id="sizePicker" min="1" max="25" value="1">
+        <span id="sizeVal" style="width:30px">1px</span>
     </div>
-    <span id="nickDisplay"></span>
+    <div class="tool-group">
+        <input type="checkbox" id="smoothCheck">
+        <label style="font-size:12px">Smoothing</label>
+    </div>
 </div>
 
-<div id="info">LPM: Rysuj | PPM: Kamera | SHIFT: Snap 45° | Rolka: Zoom</div>
+<div id="footer">LPM: Rysuj | PPM: Kamera | SHIFT: Snap 45° | Rolka: Zoom</div>
 
 <div id="viewport">
     <canvas id="canvas" width="2048" height="1024"></canvas>
@@ -77,15 +92,17 @@
     const cursorsLayer = document.getElementById('cursors');
     const sizePicker = document.getElementById('sizePicker');
     const sizeVal = document.getElementById('sizeVal');
+    const smoothCheck = document.getElementById('smoothCheck');
     
-    let scale = 1, camX = 0, camY = 0;
+    let scale = 0.5;
+    let camX = (window.innerWidth - 2048 * scale) / 2;
+    let camY = (window.innerHeight - 1024 * scale) / 2;
     let isDrawing = false, isPanning = false;
     let currentTool = 'pen';
     let startX = 0, startY = 0;
 
-    const userName = prompt("Nick:") || "User" + Math.floor(Math.random()*100);
+    const userName = prompt("Twój Nick:") || "User" + Math.floor(Math.random()*100);
     const userId = Math.random().toString(36).substring(7);
-    document.getElementById('nickDisplay').innerText = userName;
 
     const userRef = db.ref('users/' + userId);
     userRef.onDisconnect().remove();
@@ -96,27 +113,24 @@
 
     function setTool(t) {
         currentTool = t;
-        document.getElementById('penBtn').classList.toggle('active', t==='pen');
-        document.getElementById('eraBtn').classList.toggle('active', t==='eraser');
+        document.querySelectorAll('.tool-group button').forEach(b => b.classList.remove('active'));
+        if(t === 'pen') {
+            document.getElementById('penBtn').classList.add('active');
+            sizePicker.max = 25;
+        } else if(t === 'eraser') {
+            document.getElementById('eraBtn').classList.add('active');
+            sizePicker.max = 50;
+        } else {
+            document.getElementById('fillBtn').classList.add('active');
+        }
     }
 
     sizePicker.oninput = () => sizeVal.innerText = sizePicker.value + 'px';
 
     function getCoords(e) {
-        const x = (e.clientX - camX) / scale;
-        const y = (e.clientY - camY) / scale;
-        return { x: Math.floor(x), y: Math.floor(y) };
-    }
-
-    function snapPoint(current, start) {
-        const dx = current.x - start.x;
-        const dy = current.y - start.y;
-        const angle = Math.atan2(dy, dx);
-        const snappedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
-        const dist = Math.sqrt(dx * dx + dy * dy);
         return {
-            x: Math.round(start.x + Math.cos(snappedAngle) * dist),
-            y: Math.round(start.y + Math.sin(snappedAngle) * dist)
+            x: Math.floor((e.clientX - camX) / scale),
+            y: Math.floor((e.clientY - camY) / scale)
         };
     }
 
@@ -124,14 +138,15 @@
 
     viewport.onmousedown = (e) => {
         if (e.button === 0) {
-            isDrawing = true;
-            const pos = getCoords(e);
-            startX = pos.x;
-            startY = pos.y;
-            draw(e);
-        } else if (e.button === 2) {
-            isPanning = true;
-        }
+            if (currentTool === 'fill') {
+                floodFill(getCoords(e));
+            } else {
+                isDrawing = true;
+                const pos = getCoords(e);
+                startX = pos.x; startY = pos.y;
+                draw(e);
+            }
+        } else if (e.button === 2) isPanning = true;
     };
 
     window.onmousemove = (e) => {
@@ -144,29 +159,59 @@
         userRef.set({ x: e.clientX, y: e.clientY, name: userName });
     };
 
-    window.onmouseup = () => {
-        isDrawing = false;
-        isPanning = false;
-    };
+    window.onmouseup = () => { isDrawing = false; isPanning = false; };
 
     function draw(e) {
         let pos = getCoords(e);
-        if (e.shiftKey) pos = snapPoint(pos, {x: startX, y: startY});
+        if (e.shiftKey) {
+            const dx = pos.x - startX, dy = pos.y - startY;
+            const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            pos.x = Math.round(startX + Math.cos(angle) * dist);
+            pos.y = Math.round(startY + Math.sin(angle) * dist);
+        }
 
         const color = currentTool === 'eraser' ? '#FFFFFF' : document.getElementById('colorPicker').value;
         const size = parseInt(sizePicker.value);
+        const smooth = smoothCheck.checked;
 
-        for (let i = 0; i < size; i++) {
-            for (let j = 0; j < size; j++) {
-                db.ref('pixels/' + (pos.x + i) + '_' + (pos.y + j)).set(color);
+        if (!smooth) {
+            for (let i = -Math.floor(size/2); i < Math.ceil(size/2); i++) {
+                for (let j = -Math.floor(size/2); j < Math.ceil(size/2); j++) {
+                    db.ref('pixels/' + (pos.x + i) + '_' + (pos.y + j)).set(color);
+                }
+            }
+        } else {
+            drawSoft(pos.x, pos.y, size, color);
+        }
+    }
+
+    function drawSoft(cx, cy, radius, color) {
+        for (let x = -radius; x <= radius; x++) {
+            for (let y = -radius; y <= radius; y++) {
+                const dist = Math.sqrt(x*x + y*y);
+                if (dist <= radius) {
+                    if (Math.random() > (dist / radius)) {
+                        db.ref('pixels/' + (cx + x) + '_' + (cy + y)).set(color);
+                    }
+                }
             }
         }
+    }
+
+    
+
+    function floodFill(pos) {
+        const targetColor = ctx.getImageData(pos.x, pos.y, 1, 1).data;
+        const fillColor = document.getElementById('colorPicker').value;
+        db.ref('pixels/' + pos.x + '_' + pos.y).set(fillColor);
     }
 
     viewport.onwheel = (e) => {
         e.preventDefault();
         const factor = e.deltaY > 0 ? 0.9 : 1.1;
         scale *= factor;
+        scale = Math.min(Math.max(0.1, scale), 20);
         updateTransform();
     };
 
