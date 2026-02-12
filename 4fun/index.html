@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Pixel Art Studio Pro</title>
+    <title>Pixel Art Studio Pro v2</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
@@ -174,11 +174,13 @@
         const targetIdx = (y * 2048 + x) * 4;
         const targetR = data[targetIdx], targetG = data[targetIdx+1], targetB = data[targetIdx+2];
         const fillRgb = hexToRgb(fillHex);
-        if (targetR === fillRgb.r && targetG === fillRgb.g && targetB === fillRgb.b) return;
+        
+        // POPRAWKA WIADRA: Usunięto sprawdzanie, czy kolor docelowy jest taki sam jak farba.
 
         const queue = [[x, y]];
         const updates = {};
-        while(queue.length > 0 && Object.keys(updates).length < 2000) {
+        let count = 0;
+        while(queue.length > 0 && count < 3000) {
             const [cx, cy] = queue.pop();
             if(cx < 0 || cy < 0 || cx >= 2048 || cy >= 1024) continue;
             const idx = (cy * 2048 + cx) * 4;
@@ -186,6 +188,7 @@
                 data[idx] = fillRgb.r; data[idx+1] = fillRgb.g; data[idx+2] = fillRgb.b;
                 updates[cx + '_' + cy] = fillHex;
                 queue.push([cx+1, cy], [cx-1, cy], [cx, cy+1], [cx, cy-1]);
+                count++;
             }
         }
         db.ref('pixels').update(updates);
@@ -232,7 +235,19 @@
         userRef.set({ x: e.clientX, y: e.clientY, name: userName });
     };
 
-    window.onmouseup = () => isDrawing = false;
+    // POPRAWKA PUSZCZENIA MYSZKI:
+    window.onmouseup = (e) => {
+        // 1. Dorysuj linię do końca, jeśli smoothing był włączony (naprawa "kropki")
+        if (isDrawing && currentTool !== 'fill') {
+            const finalPos = getCoords(e);
+            const color = currentTool === 'eraser' ? '#FFFFFF' : colorPicker.value;
+            drawLine(lastX, lastY, finalPos.x, finalPos.y, color, parseInt(sizePicker.value), smoothCheck.checked);
+        }
+        // 2. Zresetuj wszystkie stany (naprawa zacinającej się kamery)
+        isDrawing = false;
+        isPanning = false;
+    };
+
     viewport.onwheel = (e) => {
         e.preventDefault();
         const factor = e.deltaY > 0 ? 0.9 : 1.1;
