@@ -2,148 +2,63 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Discord Clone</title>
-    <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <title>Multiplayer Canvas</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; overflow: auto; cursor: crosshair; }
+        canvas { background: white; display: block; image-rendering: pixelated; }
+        .controls { position: fixed; top: 10px; left: 10px; background: white; padding: 10px; border-radius: 5px; }
+    </style>
 </head>
 <body>
-    <div class="app-container">
-        <nav class="server-list" id="server-list">
-            <div class="server-icon home-icon active" id="home-button">
-                <img src="https://assets-global.website-files.com/6257adef93867e56f84d3092/636e0a6a49cf127bf92de1e2_icon_clyde_blurple_RGB.png" alt="Home">
-            </div>
-            <div class="server-separator"></div>
-            <div class="server-icon add-server" id="add-server-btn">+</div>
-        </nav>
 
-        <aside class="sidebar">
-            <header class="sidebar-header" id="sidebar-header">
-                <span id="sidebar-title">Znajomi</span>
-            </header>
-            
-            <div class="channel-list" id="channel-list">
-                </div>
+<div class="controls">
+    <input type="color" id="colorPicker" value="#000000">
+    <button onclick="resetZoom()">Reset Zoom</button>
+    <p>Zoom: Rolka myszy | Rysuj: Kliknij</p>
+</div>
 
-            <div class="user-area">
-                <img src="" id="current-user-avatar" class="avatar-medium">
-                <div class="user-info">
-                    <span class="username" id="current-username">User</span>
-                    <span class="discriminator" id="current-discriminator">#0000</span>
-                </div>
-                <div class="user-controls">
-                    <button class="control-btn" id="mic-mute">🎤</button>
-                    <button class="control-btn">🎧</button>
-                    <button class="control-btn" id="settings-btn">⚙️</button>
-                </div>
-            </div>
-        </aside>
+<div id="canvas-container">
+    <canvas id="paintCanvas" width="1024" height="2048"></canvas>
+</div>
 
-        <main class="chat-area">
-            <header class="chat-header">
-                <div class="header-left">
-                    <span class="chat-header-symbol" id="header-symbol">@</span>
-                    <span class="chat-header-name" id="header-name">Strona Główna</span>
-                </div>
-                
-                <button id="top-add-friend-btn" class="top-add-friend-btn" style="display: none;">Dodaj znajomego</button>
+<script>
+    const canvas = document.getElementById('paintCanvas');
+    const ctx = canvas.getContext('2d');
+    const colorPicker = document.getElementById('colorPicker');
+    let scale = 1;
 
-                <div class="header-icons">
-                    <button class="call-btn" id="voice-call-btn" style="display:none;">📞</button>
-                    <button class="call-btn" id="video-call-btn" style="display:none;">📹</button>
-                </div>
-            </header>
-            
-            <div class="messages-container" id="messages-list">
-                </div>
+    function draw(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = Math.floor((e.clientX - rect.left) / scale);
+        const y = Math.floor((e.clientY - rect.top) / scale);
 
-            <div class="input-area" id="input-area" style="display:none;">
-                <div class="input-wrapper">
-                    <button class="attach-btn">+</button>
-                    <input type="text" id="message-input" placeholder="Napisz wiadomość">
-                </div>
-            </div>
-        </main>
+        ctx.fillStyle = colorPicker.value;
+        ctx.fillRect(x, y, 1, 1);
+    }
 
-        <aside class="members-sidebar" id="members-sidebar">
-            <div class="members-group">Znajomi - 0</div>
-        </aside>
-    </div>
+    canvas.addEventListener('mousedown', (e) => {
+        draw(e);
+        canvas.addEventListener('mousemove', draw);
+    });
 
-    <div class="modal-overlay" id="settings-modal">
-        <div class="modal-content settings-window">
-            <div class="settings-sidebar">
-                <div class="settings-tab active" data-tab="profile">Profil</div>
-                <div class="settings-tab" data-tab="audio">Głos i wideo</div>
-                <div class="settings-separator"></div>
-                <div class="settings-tab close-settings" id="close-settings-btn">Zamknij</div>
-            </div>
-            <div class="settings-view">
-                <div class="tab-content active" id="tab-profile">
-                    <h2>Mój profil</h2>
-                    <div class="profile-card">
-                        <div class="profile-header-bg"></div>
-                        <div class="profile-avatar-upload">
-                            <img id="settings-avatar-preview" src="">
-                            <button class="change-avatar-btn" id="change-avatar-trigger">Zmień avatar</button>
-                            <input type="file" id="avatar-upload" hidden accept="image/*">
-                        </div>
-                        <div class="profile-details">
-                            <label>NAZWA UŻYTKOWNIKA</label>
-                            <div class="input-group">
-                                <input type="text" id="settings-username-input">
-                                <span class="input-discriminator" id="settings-discriminator">#0000</span>
-                            </div>
-                            <label style="margin-top: 15px;">IDENTYFIKATOR</label>
-                            <div class="id-display" id="settings-id-display"></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="tab-content" id="tab-audio">
-                    <h2>Ustawienia głosu</h2>
-                    <div class="audio-group">
-                        <label>URZĄDZENIE WEJŚCIOWE</label>
-                        <select id="audio-input-device" class="discord-select"></select>
-                    </div>
-                    <div class="mic-test">
-                        <p>Test mikrofonu</p>
-                        <div class="mic-bar"><div class="mic-level"></div></div>
-                    </div>
-                </div>
-            </div>
-            <button class="close-btn-abs" id="close-settings-x">✕</button>
-        </div>
-    </div>
+    window.addEventListener('mouseup', () => {
+        canvas.removeEventListener('mousemove', draw);
+    });
 
-    <div class="modal-overlay" id="server-modal">
-        <div class="modal-content server-create">
-            <h2>Stwórz serwer</h2>
-            <p>Twój serwer to miejsce, gdzie spotkasz się ze znajomymi.</p>
-            <div class="server-input-group">
-                <label>NAZWA SERWERA</label>
-                <input type="text" id="new-server-name" placeholder="Mój serwer">
-            </div>
-            <div class="modal-actions">
-                <button class="btn-cancel" id="close-server-modal">Anuluj</button>
-                <button class="btn-primary" id="create-server-confirm">Stwórz</button>
-            </div>
-        </div>
-    </div>
+    window.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        scale *= delta;
+        canvas.style.transform = `scale(${scale})`;
+        canvas.style.transformOrigin = "0 0";
+    }, { passive: false });
 
-    <div class="modal-overlay" id="friend-modal">
-        <div class="modal-content friend-add">
-            <h2>Dodaj znajomego</h2>
-            <p>Wpisz tag Discorda (np. User#1234)</p>
-            <div class="server-input-group">
-                <input type="text" id="friend-id-input" placeholder="User#1234">
-            </div>
-            <div class="modal-actions">
-                <button class="btn-cancel" id="close-friend-modal">Anuluj</button>
-                <button class="btn-primary" id="add-friend-confirm">Wyślij zaproszenie</button>
-            </div>
-        </div>
-    </div>
+    function resetZoom() {
+        scale = 1;
+        canvas.style.transform = `scale(1)`;
+    }
+</script>
 
-    <script src="script.js"></script>
 </body>
 </html>
