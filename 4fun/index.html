@@ -2,73 +2,66 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Multiplayer Canvas Pro</title>
+    <title>Pixel Art Pro - Multiplayer</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: 'Segoe UI', sans-serif; }
-        #viewport { width: 100vw; height: 100vh; overflow: hidden; position: relative; cursor: crosshair; }
+        body { margin: 0; overflow: hidden; background: #121212; font-family: sans-serif; }
+        #viewport { width: 100vw; height: 100vh; position: relative; overflow: hidden; }
         canvas { 
             background: white; 
             image-rendering: pixelated; 
-            transform-origin: 0 0;
-            box-shadow: 0 0 50px rgba(0,0,0,0.5);
-        }
-        .ui-panel { 
-            position: fixed; 
-            top: 20px; 
-            left: 20px; 
-            background: rgba(255, 255, 255, 0.9); 
-            padding: 15px; 
-            border-radius: 12px; 
-            z-index: 100; 
-            display: flex; 
-            gap: 10px; 
-            align-items: center;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-        }
-        .tool-btn { 
-            padding: 8px 12px; 
-            border: 1px solid #ccc; 
-            border-radius: 6px; 
-            cursor: pointer; 
-            background: white;
-        }
-        .tool-btn.active { background: #007bff; color: white; border-color: #0056b3; }
-        .other-cursor {
             position: absolute;
-            pointer-events: none;
-            font-size: 10px;
-            color: white;
-            text-shadow: 1px 1px 1px black;
-            z-index: 50;
+            transform-origin: 0 0;
+            box-shadow: 0 0 100px rgba(0,0,0,0.8);
         }
-        .cursor-dot { width: 4px; height: 4px; background: red; border-radius: 50%; }
-        #zoom-info { position: fixed; bottom: 20px; right: 20px; color: white; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 5px; }
+        .ui { 
+            position: fixed; top: 15px; left: 15px; z-index: 10;
+            background: rgba(255, 255, 255, 0.95); padding: 12px;
+            border-radius: 10px; display: flex; gap: 15px; align-items: center;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.4);
+        }
+        .tool-group { display: flex; gap: 5px; border-right: 1px solid #ccc; padding-right: 15px; }
+        button { padding: 8px 12px; cursor: pointer; border: 1px solid #ccc; border-radius: 5px; background: white; }
+        button.active { background: #007bff; color: white; }
+        input[type="range"] { width: 80px; }
+        label { font-size: 12px; font-weight: bold; }
+        .other-cursor { position: absolute; pointer-events: none; z-index: 5; font-size: 11px; color: white; text-shadow: 1px 1px 2px black; }
+        .dot { width: 4px; height: 4px; background: red; border-radius: 50%; }
+        #info { position: fixed; bottom: 15px; left: 15px; color: #aaa; font-size: 11px; pointer-events: none; }
     </style>
 </head>
 <body>
 
-<div class="ui-panel">
-    <button class="tool-btn active" id="penTool" onclick="setTool('pen')">Ołówek</button>
-    <button class="tool-btn" id="eraserTool" onclick="setTool('eraser')">Gumka</button>
-    <input type="color" id="colorPicker" value="#000000">
-    <div style="border-left: 1px solid #ccc; height: 20px; margin: 0 5px;"></div>
-    <span id="nickDisplay" style="font-weight: bold;"></span>
+<div class="ui">
+    <div class="tool-group">
+        <button id="penBtn" class="active" onclick="setTool('pen')">Ołówek</button>
+        <button id="eraBtn" onclick="setTool('eraser')">Gumka</button>
+    </div>
+    <div class="tool-group">
+        <label>Kolor:</label>
+        <input type="color" id="colorPicker" value="#000000">
+    </div>
+    <div class="tool-group">
+        <label>Rozmiar:</label>
+        <input type="range" id="sizePicker" min="1" max="10" value="1">
+        <span id="sizeVal">1px</span>
+    </div>
+    <span id="nickDisplay"></span>
 </div>
 
-<div id="zoom-info">Zoom: 100%</div>
+<div id="info">LPM: Rysuj | PPM: Kamera | SHIFT: Snap 45° | Rolka: Zoom</div>
 
 <div id="viewport">
     <canvas id="canvas" width="2048" height="1024"></canvas>
-    <div id="remoteCursors"></div>
+    <div id="cursors"></div>
 </div>
 
 <script>
     const firebaseConfig = {
         apiKey: "AIzaSyCwk4Im8EtC_Eyu7dllwqTW54dwOXPhhf4",
         authDomain: "freedraw-ef17b.firebaseapp.com",
-        databaseURL: "https://freedraw-ef17b-default-rtdb.firebaseio.com",
+        databaseURL: "https://freedraw-ef17b-default-rtdb.firebaseio.com/",
         projectId: "freedraw-ef17b",
         storageBucket: "freedraw-ef17b.firebasestorage.app",
         messagingSenderId: "155298386414",
@@ -77,98 +70,134 @@
 
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
-    
+
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const viewport = document.getElementById('viewport');
-    const colorPicker = document.getElementById('colorPicker');
-    const remoteCursors = document.getElementById('remoteCursors');
-    const zoomInfo = document.getElementById('zoom-info');
-
+    const cursorsLayer = document.getElementById('cursors');
+    const sizePicker = document.getElementById('sizePicker');
+    const sizeVal = document.getElementById('sizeVal');
+    
+    let scale = 1, camX = 0, camY = 0;
+    let isDrawing = false, isPanning = false;
     let currentTool = 'pen';
-    let scale = 1;
-    let offsetX = 0;
-    let offsetY = 0;
-    let isDrawing = false;
+    let startX = 0, startY = 0;
 
-    const userName = prompt("Podaj swój nick:") || "User" + Math.floor(Math.random() * 100);
+    const userName = prompt("Nick:") || "User" + Math.floor(Math.random()*100);
     const userId = Math.random().toString(36).substring(7);
     document.getElementById('nickDisplay').innerText = userName;
 
     const userRef = db.ref('users/' + userId);
     userRef.onDisconnect().remove();
 
-    function setTool(tool) {
-        currentTool = tool;
-        document.getElementById('penTool').classList.toggle('active', tool === 'pen');
-        document.getElementById('eraserTool').classList.toggle('active', tool === 'eraser');
+    function updateTransform() {
+        canvas.style.transform = `translate(${camX}px, ${camY}px) scale(${scale})`;
     }
 
-    function getMousePos(e) {
-        const rect = canvas.getBoundingClientRect();
+    function setTool(t) {
+        currentTool = t;
+        document.getElementById('penBtn').classList.toggle('active', t==='pen');
+        document.getElementById('eraBtn').classList.toggle('active', t==='eraser');
+    }
+
+    sizePicker.oninput = () => sizeVal.innerText = sizePicker.value + 'px';
+
+    function getCoords(e) {
+        const x = (e.clientX - camX) / scale;
+        const y = (e.clientY - camY) / scale;
+        return { x: Math.floor(x), y: Math.floor(y) };
+    }
+
+    function snapPoint(current, start) {
+        const dx = current.x - start.x;
+        const dy = current.y - start.y;
+        const angle = Math.atan2(dy, dx);
+        const snappedAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
+        const dist = Math.sqrt(dx * dx + dy * dy);
         return {
-            x: Math.floor((e.clientX - rect.left) / scale),
-            y: Math.floor((e.clientY - rect.top) / scale)
+            x: Math.round(start.x + Math.cos(snappedAngle) * dist),
+            y: Math.round(start.y + Math.sin(snappedAngle) * dist)
         };
     }
 
-    function paint(e) {
-        if (!isDrawing) return;
-        const pos = getMousePos(e);
-        const color = currentTool === 'eraser' ? '#FFFFFF' : colorPicker.value;
-        db.ref('pixels/' + pos.x + '_' + pos.y).set(color);
+    viewport.oncontextmenu = (e) => e.preventDefault();
+
+    viewport.onmousedown = (e) => {
+        if (e.button === 0) {
+            isDrawing = true;
+            const pos = getCoords(e);
+            startX = pos.x;
+            startY = pos.y;
+            draw(e);
+        } else if (e.button === 2) {
+            isPanning = true;
+        }
+    };
+
+    window.onmousemove = (e) => {
+        if (isDrawing) draw(e);
+        if (isPanning) {
+            camX += e.movementX;
+            camY += e.movementY;
+            updateTransform();
+        }
+        userRef.set({ x: e.clientX, y: e.clientY, name: userName });
+    };
+
+    window.onmouseup = () => {
+        isDrawing = false;
+        isPanning = false;
+    };
+
+    function draw(e) {
+        let pos = getCoords(e);
+        if (e.shiftKey) pos = snapPoint(pos, {x: startX, y: startY});
+
+        const color = currentTool === 'eraser' ? '#FFFFFF' : document.getElementById('colorPicker').value;
+        const size = parseInt(sizePicker.value);
+
+        for (let i = 0; i < size; i++) {
+            for (let j = 0; j < size; j++) {
+                db.ref('pixels/' + (pos.x + i) + '_' + (pos.y + j)).set(color);
+            }
+        }
     }
 
-    viewport.addEventListener('mousedown', (e) => {
-        isDrawing = true;
-        paint(e);
-    });
-
-    window.addEventListener('mouseup', () => isDrawing = false);
-    viewport.addEventListener('mousemove', (e) => {
-        paint(e);
-        userRef.set({
-            x: e.clientX,
-            y: e.clientY,
-            name: userName
-        });
-    });
-
-    viewport.addEventListener('wheel', (e) => {
+    viewport.onwheel = (e) => {
         e.preventDefault();
-        const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        scale *= delta;
-        scale = Math.min(Math.max(0.1, scale), 20);
-        canvas.style.transform = `scale(${scale})`;
-        zoomInfo.innerText = `Zoom: ${Math.round(scale * 100)}%`;
-    }, { passive: false });
+        const factor = e.deltaY > 0 ? 0.9 : 1.1;
+        scale *= factor;
+        updateTransform();
+    };
 
-    db.ref('pixels').on('child_added', (snap) => {
-        const [x, y] = snap.key.split('_');
-        ctx.fillStyle = snap.val();
+    db.ref('pixels').on('child_added', (s) => {
+        const [x, y] = s.key.split('_');
+        ctx.fillStyle = s.val();
         ctx.fillRect(x, y, 1, 1);
     });
 
-    db.ref('pixels').on('child_changed', (snap) => {
-        const [x, y] = snap.key.split('_');
-        ctx.fillStyle = snap.val();
+    db.ref('pixels').on('child_changed', (s) => {
+        const [x, y] = s.key.split('_');
+        ctx.fillStyle = s.val();
         ctx.fillRect(x, y, 1, 1);
     });
 
-    db.ref('users').on('value', (snap) => {
-        remoteCursors.innerHTML = '';
-        const users = snap.val();
-        for (let id in users) {
+    db.ref('users').on('value', (s) => {
+        cursorsLayer.innerHTML = '';
+        const data = s.val();
+        for (let id in data) {
             if (id === userId) continue;
-            const u = users[id];
+            const u = data[id];
             const div = document.createElement('div');
             div.className = 'other-cursor';
             div.style.left = u.x + 'px';
             div.style.top = u.y + 'px';
-            div.innerHTML = `<div class="cursor-dot"></div> ${u.name}`;
-            remoteCursors.appendChild(div);
+            div.innerHTML = `<div class="dot"></div>${u.name}`;
+            cursorsLayer.appendChild(div);
         }
     });
+
+    updateTransform();
 </script>
 
 </body>
