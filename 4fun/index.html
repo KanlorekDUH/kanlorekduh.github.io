@@ -1,466 +1,96 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pl">
 <head>
-<meta charset="UTF-8">
-<title>Bridge Constructor</title>
-<style>
-    body { margin: 0; background-color: #0f1015; overflow: hidden; font-family: 'Segoe UI', sans-serif; user-select: none; }
-    canvas { display: block; }
-    #ui {
-        position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-        display: flex; flex-direction: column; gap: 8px; align-items: center;
-        pointer-events: none;
-    }
-    .row { display: flex; gap: 8px; pointer-events: auto; }
-    .btn {
-        background: #25262b; color: #aaa; border: 1px solid #333; padding: 8px 16px;
-        cursor: pointer; border-radius: 4px; font-weight: 600; min-width: 50px; text-align: center;
-        transition: 0.1s; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px;
-    }
-    .btn.active { background: #3b82f6; color: #fff; border-color: #60a5fa; box-shadow: 0 0 15px rgba(59, 130, 246, 0.4); }
-    .btn:hover:not(.active) { background: #333; color: #fff; }
-    
-    .mat-wood { border-bottom: 3px solid #8d6e63; }
-    .mat-steel { border-bottom: 3px solid #b0bec5; }
-    .mat-rope { border-bottom: 3px solid #eab308; }
-    .mat-road { border-bottom: 3px solid #444; }
-
-    #stats { position: absolute; top: 20px; left: 20px; color: #666; font-size: 14px; font-weight: bold; pointer-events: none; }
-    #controls { position: absolute; top: 20px; right: 20px; text-align: right; color: #444; font-size: 12px; pointer-events: none; }
-    span.key { color: #888; border: 1px solid #333; padding: 2px 6px; border-radius: 4px; margin-left: 5px; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord Clone</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
+    <div class="app-container">
+        <nav class="server-list">
+            <div class="server-icon home-icon">
+                <img src="https://assets-global.website-files.com/6257adef93867e56f84d3092/636e0a6a49cf127bf92de1e2_icon_clyde_blurple_RGB.png" alt="Home">
+            </div>
+            <div class="server-separator"></div>
+            <div class="server-icon">
+                <img src="https://ui-avatars.com/api/?name=S&background=random" alt="Server">
+            </div>
+            <div class="server-icon">
+                <img src="https://ui-avatars.com/api/?name=G&background=random" alt="Server">
+            </div>
+            <div class="server-icon add-server">+</div>
+        </nav>
 
-<div id="stats">Entities: 0 | Stress: 0%</div>
-<div id="controls">
-    Pause <span class="key">SPACE</span><br>
-    Delete <span class="key">R-CLICK</span>
-</div>
+        <aside class="sidebar">
+            <header class="sidebar-header">
+                <span>Wiadomości prywatne</span>
+            </header>
+            <div class="channel-list">
+                <div class="channel-item active">
+                    <img src="https://ui-avatars.com/api/?name=Kosa&background=random" class="avatar-small">
+                    <span class="channel-name">Kosa</span>
+                </div>
+                <div class="channel-item">
+                    <img src="https://ui-avatars.com/api/?name=BoyKisser&background=random" class="avatar-small">
+                    <span class="channel-name">BoyKisser</span>
+                </div>
+                <div class="channel-item">
+                    <img src="https://ui-avatars.com/api/?name=Marek&background=random" class="avatar-small">
+                    <span class="channel-name">Marek20119</span>
+                </div>
+            </div>
+            <div class="user-area" id="user-settings-trigger">
+                <img src="https://ui-avatars.com/api/?name=Ty&background=2f3136&color=fff" id="current-user-avatar" class="avatar-medium">
+                <div class="user-info">
+                    <span class="username" id="current-username">Użytkownik</span>
+                    <span class="discriminator">#0001</span>
+                </div>
+                <div class="user-controls">🎤 🎧 ⚙️</div>
+            </div>
+        </aside>
 
-<div id="ui">
-    <div class="row">
-        <div class="btn active" onclick="setMode('BUILD')" id="btn-build">BUILD</div>
-        <div class="btn" onclick="setMode('DRAG')">DRAG</div>
-        <div class="btn" onclick="setMode('CAR')">CAR</div>
-        <div class="btn" onclick="setMode('WEIGHT')">WEIGHT</div>
-        <div class="btn" onclick="reset()">CLEAR</div>
-    </div>
-    <div class="row" id="mat-row">
-        <div class="btn mat-wood active" onclick="setMaterial('wood', this)">WOOD</div>
-        <div class="btn mat-steel" onclick="setMaterial('steel', this)">STEEL</div>
-        <div class="btn mat-rope" onclick="setMaterial('rope', this)">ROPE</div>
-        <div class="btn mat-road" onclick="setMaterial('road', this)">ROAD</div>
-    </div>
-</div>
-
-<canvas id="c"></canvas>
-
-<script>
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
-const uiStats = document.getElementById('stats');
-
-let width, height;
-let points = [];
-let sticks = [];
-let vehicles = [];
-let mode = 'BUILD';
-let currentMat = 'wood';
-let isPaused = false;
-let isMouseDown = false;
-let dragPoint = null;
-let mouse = { x: 0, y: 0 };
-
-const MATS = {
-    wood:  { color: '#8d6e63', width: 4, strength: 100, stiff: 1.0, weight: 1.0 },
-    steel: { color: '#cfd8dc', width: 6, strength: 500, stiff: 1.0, weight: 2.0 },
-    rope:  { color: '#eab308', width: 2, strength: 150, stiff: 0.1, weight: 0.5 },
-    road:  { color: '#333333', width: 10, strength: 400, stiff: 1.0, weight: 3.0 }
-};
-
-const PHYS = {
-    gravity: 0.5,
-    friction: 0.99,
-    groundBounce: 0.3,
-    snap: 15
-};
-
-class Point {
-    constructor(x, y, pinned = false, mass = 1) {
-        this.x = x;
-        this.y = y;
-        this.oldx = x;
-        this.oldy = y;
-        this.pinned = pinned;
-        this.mass = mass;
-    }
-
-    update() {
-        if (this.pinned) return;
-        const vx = (this.x - this.oldx) * PHYS.friction;
-        const vy = (this.y - this.oldy) * PHYS.friction;
-        this.oldx = this.x;
-        this.oldy = this.y;
-        this.x += vx;
-        this.y += vy + PHYS.gravity * this.mass;
-
-        if (this.y > height) { this.y = height; this.oldy = this.y + vy * PHYS.groundBounce; }
-        if (this.x > width) { this.x = width; this.oldx = this.x + vx * PHYS.groundBounce; }
-        else if (this.x < 0) { this.x = 0; this.oldx = this.x + vx * PHYS.groundBounce; }
-    }
-
-    draw() {
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.pinned ? 5 : 3, 0, Math.PI*2);
-        ctx.fillStyle = this.pinned ? '#ef4444' : '#fff';
-        ctx.fill();
-    }
-}
-
-class Stick {
-    constructor(p1, p2, type) {
-        this.p1 = p1;
-        this.p2 = p2;
-        this.type = type;
-        this.len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-        this.active = true;
-        this.stress = 0;
-        
-        const m = MATS[type];
-        if(!p1.pinned) p1.mass += m.weight;
-        if(!p2.pinned) p2.mass += m.weight;
-    }
-
-    update() {
-        if (!this.active) return;
-        const dx = this.p2.x - this.p1.x;
-        const dy = this.p2.y - this.p1.y;
-        const dist = Math.hypot(dx, dy);
-        if (dist === 0) return;
-
-        const diff = this.len - dist;
-        this.stress = Math.abs(diff);
-
-        if (this.stress > MATS[this.type].strength) {
-            this.active = false;
-            return;
-        }
-
-        const percent = (diff / dist) * 0.5 * MATS[this.type].stiff;
-        const ox = dx * percent;
-        const oy = dy * percent;
-
-        if (!this.p1.pinned) { this.p1.x -= ox; this.p1.y -= oy; }
-        if (!this.p2.pinned) { this.p2.x += ox; this.p2.y += oy; }
-    }
-
-    draw() {
-        if (!this.active) return;
-        const m = MATS[this.type];
-        const strRatio = Math.min(this.stress / m.strength, 1);
-        
-        ctx.beginPath();
-        ctx.moveTo(this.p1.x, this.p1.y);
-        ctx.lineTo(this.p2.x, this.p2.y);
-        
-        let r, g, b;
-        if (strRatio > 0.5) {
-            r = 255; g = 255 * (1 - strRatio) * 2; b = 0;
-        } else {
-            ctx.strokeStyle = m.color;
-        }
-        
-        if(strRatio > 0.5) ctx.strokeStyle = `rgb(${r},${g},${b})`;
-        else ctx.strokeStyle = m.color;
-
-        ctx.lineWidth = m.width;
-        ctx.lineCap = 'round';
-        ctx.stroke();
-    }
-}
-
-class Car {
-    constructor(x, y) {
-        this.w1 = new Point(x - 20, y, false, 5);
-        this.w2 = new Point(x + 20, y, false, 5);
-        this.body = new Point(x, y - 20, false, 5);
-        this.parts = [this.w1, this.w2, this.body];
-        
-        this.axles = [];
-        this.axles.push(new Stick(this.w1, this.w2, 'steel'));
-        this.axles.push(new Stick(this.w1, this.body, 'steel'));
-        this.axles.push(new Stick(this.w2, this.body, 'steel'));
-        
-        this.speed = 3;
-    }
-
-    update() {
-        this.parts.forEach(p => p.update());
-        this.axles.forEach(s => s.update());
-        
-        [this.w1, this.w2].forEach(wheel => {
-            sticks.forEach(road => {
-                if (road.type !== 'road' || !road.active) return;
-                
-                const rx = road.p2.x - road.p1.x;
-                const ry = road.p2.y - road.p1.y;
-                const len2 = rx*rx + ry*ry;
-                let t = ((wheel.x - road.p1.x) * rx + (wheel.y - road.p1.y) * ry) / len2;
-                t = Math.max(0, Math.min(1, t));
-                
-                const cx = road.p1.x + t * rx;
-                const cy = road.p1.y + t * ry;
-                
-                const dist = Math.hypot(wheel.x - cx, wheel.y - cy);
-                
-                if (dist < 15) {
-                    const nx = -ry;
-                    const ny = rx;
-                    const nLen = Math.hypot(nx, ny);
-                    
-                    const pushX = (nx / nLen) * (15 - dist);
-                    const pushY = (ny / nLen) * (15 - dist);
-
-                    wheel.x += pushX;
-                    wheel.y += pushY;
-                    
-                    wheel.x += (rx/Math.sqrt(len2)) * this.speed;
-                    wheel.y += (ry/Math.sqrt(len2)) * this.speed;
-
-                    const force = 0.5;
-                    if(!road.p1.pinned) { road.p1.x -= pushX * (1-t) * force; road.p1.y -= pushY * (1-t) * force; }
-                    if(!road.p2.pinned) { road.p2.x -= pushX * t * force; road.p2.y -= pushY * t * force; }
-                }
-            });
-        });
-    }
-
-    draw() {
-        ctx.fillStyle = '#ef4444';
-        ctx.beginPath();
-        ctx.moveTo(this.w1.x, this.w1.y);
-        ctx.lineTo(this.body.x, this.body.y);
-        ctx.lineTo(this.w2.x, this.w2.y);
-        ctx.fill();
-        
-        ctx.fillStyle = '#fff';
-        ctx.beginPath(); ctx.arc(this.w1.x, this.w1.y, 8, 0, Math.PI*2); ctx.fill();
-        ctx.beginPath(); ctx.arc(this.w2.x, this.w2.y, 8, 0, Math.PI*2); ctx.fill();
-    }
-}
-
-class Weight {
-    constructor(x, y) {
-        this.p = new Point(x, y, false, 20);
-        this.r = 15;
-    }
-    update() {
-        this.p.update();
-        sticks.forEach(s => {
-            if(!s.active) return;
-            const rx = s.p2.x - s.p1.x;
-            const ry = s.p2.y - s.p1.y;
-            const len2 = rx*rx + ry*ry;
-            let t = ((this.p.x - s.p1.x) * rx + (this.p.y - s.p1.y) * ry) / len2;
-            t = Math.max(0, Math.min(1, t));
+        <main class="chat-area">
+            <header class="chat-header">
+                <span class="chat-header-symbol">@</span>
+                <span class="chat-header-name">Kosa</span>
+                <div class="header-icons">📞 📹 📌 👤 🔎</div>
+            </header>
             
-            const cx = s.p1.x + t * rx;
-            const cy = s.p1.y + t * ry;
-            const dist = Math.hypot(this.p.x - cx, this.p.y - cy);
-            
-            if (dist < this.r + MATS[s.type].width/2) {
-                const nx = (this.p.x - cx) / dist;
-                const ny = (this.p.y - cy) / dist;
-                const push = (this.r + MATS[s.type].width/2 - dist);
-                
-                this.p.x += nx * push;
-                this.p.y += ny * push;
-                
-                const force = 0.8;
-                if(!s.p1.pinned) { s.p1.x -= nx * push * (1-t) * force; s.p1.y -= ny * push * (1-t) * force; }
-                if(!s.p2.pinned) { s.p2.x -= nx * push * t * force; s.p2.y -= ny * push * t * force; }
-            }
-        });
-    }
-    draw() {
-        ctx.fillStyle = '#3b82f6';
-        ctx.beginPath();
-        ctx.fillRect(this.p.x - 15, this.p.y - 15, 30, 30);
-        ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.2)';
-        ctx.fillRect(this.p.x - 15, this.p.y - 15, 30, 5);
-    }
-}
+            <div class="messages-container" id="messages-list">
+                <div class="message">
+                    <img src="https://ui-avatars.com/api/?name=Kosa&background=random" class="avatar-message">
+                    <div class="message-content">
+                        <div class="message-header">
+                            <span class="message-author">Kosa</span>
+                            <span class="message-time">Dzisiaj o 14:30</span>
+                        </div>
+                        <div class="message-text">Nie przeszkadzać</div>
+                    </div>
+                </div>
+            </div>
 
-function resize() {
-    width = window.innerWidth;
-    height = window.innerHeight;
-    canvas.width = width;
-    canvas.height = height;
-}
+            <div class="input-area">
+                <div class="input-wrapper">
+                    <button class="attach-btn">+</button>
+                    <input type="text" id="message-input" placeholder="Napisz do @Kosa">
+                    <div class="input-icons">🎁 GIF 😊</div>
+                </div>
+            </div>
+        </main>
 
-function getClosestPoint(x, y, range = 20) {
-    let best = null;
-    let min = range;
-    for (const p of points) {
-        const d = Math.hypot(p.x - x, p.y - y);
-        if (d < min) { min = d; best = p; }
-    }
-    return best;
-}
-
-window.setMode = (m) => {
-    mode = m;
-    document.querySelectorAll('#ui .row:first-child .btn').forEach(b => b.classList.remove('active'));
-    event.target.classList.add('active');
-};
-
-window.setMaterial = (m, el) => {
-    currentMat = m;
-    document.querySelectorAll('.mat-row .btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.mat-' + m).forEach(b => b.classList.add('active'));
-};
-
-window.reset = () => { points = []; sticks = []; vehicles = []; createTerrain(); };
-
-function createTerrain() {
-    const gap = width * 0.6;
-    const startX = width * 0.2;
-    const y = height * 0.6;
-    
-    const p1 = new Point(startX, y, true);
-    const p2 = new Point(startX + gap, y, true);
-    points.push(p1, p2);
-}
-
-window.addEventListener('resize', resize);
-window.addEventListener('keydown', e => { if(e.code === 'Space') isPaused = !isPaused; });
-
-canvas.addEventListener('mousedown', e => {
-    isMouseDown = true;
-    mouse.x = e.clientX;
-    mouse.y = e.clientY;
-    
-    if (e.button === 2) {
-        const p = getClosestPoint(mouse.x, mouse.y, 30);
-        if(p && !p.pinned) {
-            points = points.filter(pt => pt !== p);
-            sticks = sticks.filter(s => s.p1 !== p && s.p2 !== p);
-            return;
-        }
-        sticks.forEach(s => {
-            const cx = (s.p1.x + s.p2.x)/2;
-            const cy = (s.p1.y + s.p2.y)/2;
-            if(Math.hypot(cx - mouse.x, cy - mouse.y) < 20) s.active = false;
-        });
-        vehicles = vehicles.filter(v => {
-            if(v instanceof Car) return Math.hypot(v.body.x - mouse.x, v.body.y - mouse.y) > 40;
-            return Math.hypot(v.p.x - mouse.x, v.p.y - mouse.y) > 40;
-        });
-        return;
-    }
-
-    if (mode === 'CAR') {
-        vehicles.push(new Car(mouse.x, mouse.y));
-    } else if (mode === 'WEIGHT') {
-        vehicles.push(new Weight(mouse.x, mouse.y));
-    } else if (mode === 'DRAG') {
-        dragPoint = getClosestPoint(mouse.x, mouse.y, 50);
-        if(dragPoint) { dragPoint.oldx = dragPoint.x; dragPoint.oldy = dragPoint.y; }
-    } else if (mode === 'BUILD') {
-        const existing = getClosestPoint(mouse.x, mouse.y, PHYS.snap);
-        if (existing) {
-            dragPoint = existing;
-        } else {
-            const p = new Point(mouse.x, mouse.y);
-            points.push(p);
-            dragPoint = p;
-        }
-    }
-});
-
-canvas.addEventListener('mousemove', e => {
-    mouse.x = e.clientX;
-    mouse.y = e.clientY;
-    if (isMouseDown && mode === 'DRAG' && dragPoint) {
-        dragPoint.x = mouse.x;
-        dragPoint.y = mouse.y;
-        dragPoint.oldx = mouse.x;
-        dragPoint.oldy = mouse.y;
-    }
-});
-
-canvas.addEventListener('mouseup', e => {
-    if (mode === 'BUILD' && dragPoint) {
-        const target = getClosestPoint(e.clientX, e.clientY, PHYS.snap);
-        if (target && target !== dragPoint) {
-            sticks.push(new Stick(dragPoint, target, currentMat));
-        } else if (!target) {
-            const p = new Point(e.clientX, e.clientY);
-            points.push(p);
-            sticks.push(new Stick(dragPoint, p, currentMat));
-        }
-    }
-    isMouseDown = false;
-    dragPoint = null;
-});
-
-canvas.addEventListener('contextmenu', e => e.preventDefault());
-
-function update() {
-    if(!isPaused) {
-        points.forEach(p => p.update());
-        for(let i=0; i<3; i++) {
-            sticks.forEach(s => s.update());
-            vehicles.forEach(v => v.update());
-        }
-    }
-    sticks = sticks.filter(s => s.active);
-}
-
-function draw() {
-    ctx.fillStyle = '#0f1015';
-    ctx.fillRect(0, 0, width, height);
-
-    ctx.strokeStyle = '#1e1e24';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    for(let i=0; i<width; i+=40) { ctx.moveTo(i,0); ctx.lineTo(i,height); }
-    for(let i=0; i<height; i+=40) { ctx.moveTo(0,i); ctx.lineTo(width,i); }
-    ctx.stroke();
-
-    sticks.forEach(s => { if(s.type === 'road') s.draw(); });
-    sticks.forEach(s => { if(s.type !== 'road') s.draw(); });
-    
-    points.forEach(p => p.draw());
-    vehicles.forEach(v => v.draw());
-
-    if (isMouseDown && mode === 'BUILD' && dragPoint) {
-        ctx.beginPath();
-        ctx.moveTo(dragPoint.x, dragPoint.y);
-        ctx.lineTo(mouse.x, mouse.y);
-        ctx.strokeStyle = MATS[currentMat].color;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-    }
-
-    let maxStress = 0;
-    sticks.forEach(s => maxStress = Math.max(maxStress, s.stress / MATS[s.type].strength));
-    uiStats.innerHTML = `Entities: ${points.length + sticks.length} | Max Stress: ${Math.round(maxStress*100)}% ${isPaused ? '<span style="color:#ef4444; margin-left:10px">PAUSED</span>' : ''}`;
-}
-
-function loop() {
-    update();
-    draw();
-    requestAnimationFrame(loop);
-}
-
-resize();
-createTerrain();
-loop();
-</script>
+        <aside class="members-sidebar">
+            <div class="members-group">Dostępni - 1</div>
+            <div class="member-item">
+                <img src="https://ui-avatars.com/api/?name=Kosa&background=random" class="avatar-small status-online">
+                <div class="member-info">
+                    <span class="member-name">Kosa</span>
+                    <span class="member-status">Nie przeszkadzać</span>
+                </div>
+            </div>
+        </aside>
+    </div>
+    <script src="script.js"></script>
 </body>
 </html>
