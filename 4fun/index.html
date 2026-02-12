@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Pixel Art Studio Pro v2</title>
+    <title>Pixel Art Studio Pro - Solid</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
@@ -53,7 +53,7 @@
     </div>
     <div class="tool-group">
         <input type="checkbox" id="smoothCheck">
-        <label style="font-size:11px">Smoothing</label>
+        <label style="font-size:11px">Stabilizacja</label>
     </div>
 </div>
 
@@ -128,39 +128,30 @@
         return { r, g, b };
     }
 
-    function blend(c1, opacity) {
-        const rgb = hexToRgb(c1);
-        const r = Math.round(rgb.r * opacity + 255 * (1 - opacity));
-        const g = Math.round(rgb.g * opacity + 255 * (1 - opacity));
-        const b = Math.round(rgb.b * opacity + 255 * (1 - opacity));
-        return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-    }
-
     function setPixel(x, y, color) {
         db.ref('pixels/' + Math.floor(x) + '_' + Math.floor(y)).set(color);
     }
 
-    function drawLine(x1, y1, x2, y2, color, size, smooth) {
+    function drawLine(x1, y1, x2, y2, color, size) {
         const dist = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
         const steps = Math.max(dist, 1);
         for (let i = 0; i <= steps; i++) {
             const px = x1 + (x2 - x1) * (i / steps);
             const py = y1 + (y2 - y1) * (i / steps);
-            applyBrush(px, py, color, size, smooth);
+            applyBrush(px, py, color, size);
         }
     }
 
-    function applyBrush(cx, cy, color, size, smooth) {
+    // ZMIANA: Usunięto logikę 'smooth' (antyaliasingu)
+    function applyBrush(cx, cy, color, size) {
         const r = size / 2;
-        for (let ix = -Math.ceil(r) - 2; ix <= Math.ceil(r) + 2; ix++) {
-            for (let iy = -Math.ceil(r) - 2; iy <= Math.ceil(r) + 2; iy++) {
+        // Pętla sprawdzająca obszar koła
+        for (let ix = -Math.ceil(r); ix <= Math.ceil(r); ix++) {
+            for (let iy = -Math.ceil(r); iy <= Math.ceil(r); iy++) {
                 const dx = ix, dy = iy;
-                const dist = Math.sqrt(dx*dx + dy*dy);
-                if (dist <= r) {
+                // Jeśli punkt jest wewnątrz koła pędzla, rysujemy go (bez rozmycia)
+                if (dx*dx + dy*dy <= r*r) {
                     setPixel(cx + ix, cy + iy, color);
-                } else if (smooth && dist <= r + 2) {
-                    const opacity = 1 - (dist - r) / 2;
-                    if (opacity > 0) setPixel(cx + ix, cy + iy, blend(color, opacity));
                 }
             }
         }
@@ -175,15 +166,16 @@
         const targetR = data[targetIdx], targetG = data[targetIdx+1], targetB = data[targetIdx+2];
         const fillRgb = hexToRgb(fillHex);
         
-        // POPRAWKA WIADRA: Usunięto sprawdzanie, czy kolor docelowy jest taki sam jak farba.
-
+        // Brak zabezpieczenia koloru (pozwala malować po pustym/tym samym kolorze)
         const queue = [[x, y]];
         const updates = {};
         let count = 0;
-        while(queue.length > 0 && count < 3000) {
+        
+        while(queue.length > 0 && count < 2500) {
             const [cx, cy] = queue.pop();
             if(cx < 0 || cy < 0 || cx >= 2048 || cy >= 1024) continue;
             const idx = (cy * 2048 + cx) * 4;
+            
             if(data[idx] === targetR && data[idx+1] === targetG && data[idx+2] === targetB) {
                 data[idx] = fillRgb.r; data[idx+1] = fillRgb.g; data[idx+2] = fillRgb.b;
                 updates[cx + '_' + cy] = fillHex;
@@ -202,15 +194,26 @@
                 floodFill(coords.x, coords.y, colorPicker.value);
             } else {
                 isDrawing = true;
-                brushX = coords.x; brushY = coords.y;
-                lastX = coords.x; lastY = coords.y;
+                // Jeśli stabilizacja jest wyłączona, pędzel od razu skacze do myszki
+                if (!smoothCheck.checked) {
+                    brushX = coords.x; brushY = coords.y;
+                }
+                // Jeśli włączona, zaczynamy od ostatniej pozycji pędzla (żeby nie skakał)
+                // ale przy pierwszym kliknięciu inicjujemy:
+                if (brushX === 0 && brushY === 0) {
+                     brushX = coords.x; brushY = coords.y;
+                }
+                
+                lastX = brushX; lastY = brushY;
             }
         } else if (e.button === 2) isPanning = true;
     };
 
     window.onmousemove = (e) => {
         const target = getCoords(e);
+        
         if (isDrawing) {
+            // Logika stabilizacji (Lazy Mouse)
             const lerpFactor = smoothCheck.checked ? 0.15 : 1.0;
             brushX += (target.x - brushX) * lerpFactor;
             brushY += (target.y - brushY) * lerpFactor;
@@ -225,9 +228,10 @@
             }
 
             const color = currentTool === 'eraser' ? '#FFFFFF' : colorPicker.value;
-            drawLine(lastX, lastY, finalX, finalY, color, parseInt(sizePicker.value), smoothCheck.checked);
+            drawLine(lastX, lastY, finalX, finalY, color, parseInt(sizePicker.value));
             lastX = finalX; lastY = finalY;
         }
+        
         if (isPanning) {
             camX += e.movementX; camY += e.movementY;
             updateTransform();
@@ -235,17 +239,20 @@
         userRef.set({ x: e.clientX, y: e.clientY, name: userName });
     };
 
-    // POPRAWKA PUSZCZENIA MYSZKI:
+    // ZMIANA: Naprawa blokowania kamery i dociąganie linii
     window.onmouseup = (e) => {
-        // 1. Dorysuj linię do końca, jeśli smoothing był włączony (naprawa "kropki")
         if (isDrawing && currentTool !== 'fill') {
-            const finalPos = getCoords(e);
+            // Dociągnij linię do aktualnej pozycji myszy przy puszczeniu (żeby nie zostawiać przerwy)
+            const target = getCoords(e);
             const color = currentTool === 'eraser' ? '#FFFFFF' : colorPicker.value;
-            drawLine(lastX, lastY, finalPos.x, finalPos.y, color, parseInt(sizePicker.value), smoothCheck.checked);
+            drawLine(lastX, lastY, target.x, target.y, color, parseInt(sizePicker.value));
+            // Zaktualizuj pozycję pędzla na koniec
+            brushX = target.x; 
+            brushY = target.y;
         }
-        // 2. Zresetuj wszystkie stany (naprawa zacinającej się kamery)
+        
         isDrawing = false;
-        isPanning = false;
+        isPanning = false; // To naprawia problem z kamerą
     };
 
     viewport.onwheel = (e) => {
