@@ -98,6 +98,10 @@
 
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
+    
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, 2048, 1024);
+
     const viewport = document.getElementById('viewport');
     const cursorsLayer = document.getElementById('cursors');
     const sizePicker = document.getElementById('sizePicker');
@@ -117,6 +121,7 @@
     let brushX = 0, brushY = 0;
     let previewTimeout;
     let pendingPixels = {};
+    let pendingCount = 0;
 
     const userName = prompt("Nickname:") || "User" + Math.floor(Math.random()*100);
     const userId = Math.random().toString(36).substring(7);
@@ -171,6 +176,14 @@
         return { r, g, b };
     }
 
+    function flushPixels() {
+        if (pendingCount > 0) {
+            db.ref('pixels').update(pendingPixels);
+            pendingPixels = {};
+            pendingCount = 0;
+        }
+    }
+
     function drawLine(x1, y1, x2, y2, color, size, isSquare) {
         const dist = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
         const steps = Math.max(dist, 1);
@@ -191,8 +204,13 @@
                 if (isSquare || (dx * dx + dy * dy <= rSq)) {
                     const px = Math.floor(cx + ix);
                     const py = Math.floor(cy + iy);
-                    pendingPixels[`${px}_${py}`] = color;
-                    ctx.fillRect(px, py, 1, 1);
+                    const key = `${px}_${py}`;
+                    
+                    if (pendingPixels[key] !== color) {
+                        pendingPixels[key] = color;
+                        pendingCount++;
+                        ctx.fillRect(px, py, 1, 1);
+                    }
                 }
             }
         }
@@ -201,28 +219,41 @@
     function floodFill(startX, startY, fillHex) {
         const x = Math.floor(startX);
         const y = Math.floor(startY);
+        if (x < 0 || y < 0 || x >= 2048 || y >= 1024) return;
+
         const imgData = ctx.getImageData(0, 0, 2048, 1024);
         const data = imgData.data;
         const targetIdx = (y * 2048 + x) * 4;
         const targetR = data[targetIdx], targetG = data[targetIdx+1], targetB = data[targetIdx+2];
         const fillRgb = hexToRgb(fillHex);
         
-        const queue = [[x, y]];
+        if (targetR === fillRgb.r && targetG === fillRgb.g && targetB === fillRgb.b) return;
+
+        const visited = new Uint8Array(2097152);
+        const queue = [x, y];
         const updates = {};
         let count = 0;
         
-        while(queue.length > 0 && count < 3000) {
-            const [cx, cy] = queue.pop();
-            if(cx < 0 || cy < 0 || cx >= 2048 || cy >= 1024) continue;
-            const idx = (cy * 2048 + cx) * 4;
+        while(queue.length > 0 && count < 50000) {
+            const cy = queue.pop();
+            const cx = queue.pop();
             
-            if(data[idx] === targetR && data[idx+1] === targetG && data[idx+2] === targetB) {
+            if (cx < 0 || cy < 0 || cx >= 2048 || cy >= 1024) continue;
+            
+            const vIdx = cy * 2048 + cx;
+            if (visited[vIdx]) continue;
+            visited[vIdx] = 1;
+            
+            const idx = vIdx * 4;
+            
+            if (data[idx] === targetR && data[idx+1] === targetG && data[idx+2] === targetB) {
                 data[idx] = fillRgb.r; data[idx+1] = fillRgb.g; data[idx+2] = fillRgb.b;
-                updates[cx + '_' + cy] = fillHex;
-                queue.push([cx+1, cy], [cx-1, cy], [cx, cy+1], [cx, cy-1]);
+                updates[`${cx}_${cy}`] = fillHex;
+                queue.push(cx+1, cy, cx-1, cy, cx, cy+1, cx, cy-1);
                 count++;
             }
         }
+        
         if (Object.keys(updates).length > 0) {
             ctx.putImageData(imgData, 0, 0);
             db.ref('pixels').update(updates);
@@ -244,6 +275,8 @@
 
                 const color = currentTool === 'eraser' ? '#FFFFFF' : colorPicker.value;
                 applyBrush(lastX, lastY, color, parseInt(sizePicker.value), currentTool === 'eraser');
+                
+                if (pendingCount > 150) flushPixels();
             }
         } else if (e.button === 2) isPanning = true;
     };
@@ -268,6 +301,8 @@
             const color = currentTool === 'eraser' ? '#FFFFFF' : colorPicker.value;
             drawLine(lastX, lastY, finalX, finalY, color, parseInt(sizePicker.value), currentTool === 'eraser');
 
+            if (pendingCount > 150) flushPixels();
+
             lastX = finalX; lastY = finalY;
         }
         
@@ -275,7 +310,8 @@
             camX += e.movementX; camY += e.movementY;
             updateTransform();
         }
-        userRef.set({ x: e.clientX, y: e.clientY, name: userName });
+        
+        userRef.set({ x: e.clientX, y: e.clientY, name: userName, ts: Date.now() });
     };
 
     window.onmouseup = (e) => {
@@ -284,10 +320,7 @@
             const color = currentTool === 'eraser' ? '#FFFFFF' : colorPicker.value;
             drawLine(lastX, lastY, target.x, target.y, color, parseInt(sizePicker.value), currentTool === 'eraser');
             
-            if (Object.keys(pendingPixels).length > 0) {
-                db.ref('pixels').update(pendingPixels);
-                pendingPixels = {};
-            }
+            flushPixels();
         }
         
         isDrawing = false;
@@ -317,9 +350,14 @@
     db.ref('users').on('value', (s) => {
         cursorsLayer.innerHTML = '';
         const data = s.val();
+        const now = Date.now();
+        
         for (let id in data) {
             if (id === userId) continue;
+            
             const u = data[id];
+            if (!u.ts || now - u.ts > 60000) continue;
+            
             const div = document.createElement('div');
             div.className = 'other-cursor';
             div.style.left = u.x + 'px'; div.style.top = u.y + 'px';
@@ -327,6 +365,12 @@
             cursorsLayer.appendChild(div);
         }
     });
+
+    setInterval(() => {
+        if (!isDrawing && !isPanning) {
+            userRef.update({ ts: Date.now() });
+        }
+    }, 10000);
 
     updateTransform();
 </script>
