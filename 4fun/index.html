@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pl">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>Pixel Art Studio</title>
@@ -43,15 +43,16 @@
         #preview-shape { border: 2px solid #000; }
         .shape-circle { border-radius: 50%; }
         .shape-square { border-radius: 0; }
+        #myNickDisplay { font-size: 13px; font-weight: bold; color: #007bff; border-left: 1px solid #555; padding-left: 15px; }
     </style>
 </head>
 <body>
 
 <div class="ui">
     <div class="tool-group">
-        <button id="penBtn" class="active" onclick="setTool('pen')">Ołówek</button>
-        <button id="eraBtn" onclick="setTool('eraser')">Gumka</button>
-        <button id="fillBtn" onclick="setTool('fill')">Wiadro</button>
+        <button id="penBtn" class="active" onclick="setTool('pen')">Pen</button>
+        <button id="eraBtn" onclick="setTool('eraser')">Eraser</button>
+        <button id="fillBtn" onclick="setTool('fill')">Fill</button>
     </div>
     <div class="tool-group">
         <input type="color" id="colorPicker" value="#000000">
@@ -65,13 +66,16 @@
         <input type="checkbox" id="smoothCheck">
         <label style="font-size:11px">Stabilization</label>
     </div>
+    <div class="tool-group">
+        <span id="myNickDisplay"></span>
+    </div>
 </div>
 
 <div id="preview-overlay">
     <div id="preview-shape"></div>
 </div>
 
-<div id="footer">LMB: Draw | RMB: Camera | SHIFT: Snap 45° | Scroll: Zoom</div>
+<div id="footer">LMB: Draw | RMB: Pan | SHIFT: Snap 45° | Scroll: Zoom</div>
 
 <div id="viewport">
     <canvas id="canvas" width="2048" height="1024"></canvas>
@@ -82,7 +86,7 @@
     const firebaseConfig = {
         apiKey: "AIzaSyCwk4Im8EtC_Eyu7dllwqTW54dwOXPhhf4",
         authDomain: "freedraw-ef17b.firebaseapp.com",
-        databaseURL: "https://freedraw-ef17b-default-rtdb.firebaseio.com/",
+        databaseURL: "https://freedraw-ef17b-default-rtdb.firebaseio.com",
         projectId: "freedraw-ef17b",
         storageBucket: "freedraw-ef17b.firebasestorage.app",
         messagingSenderId: "155298386414",
@@ -102,6 +106,7 @@
     const colorPicker = document.getElementById('colorPicker');
     const previewOverlay = document.getElementById('preview-overlay');
     const previewShape = document.getElementById('preview-shape');
+    const myNickDisplay = document.getElementById('myNickDisplay');
 
     let scale = 0.5;
     let camX = (window.innerWidth - 2048 * scale) / 2;
@@ -111,9 +116,12 @@
     let lastX = 0, lastY = 0;
     let brushX = 0, brushY = 0;
     let previewTimeout;
+    let pendingPixels = {};
 
-    const userName = prompt("Nick:") || "User" + Math.floor(Math.random()*100);
+    const userName = prompt("Nickname:") || "User" + Math.floor(Math.random()*100);
     const userId = Math.random().toString(36).substring(7);
+    myNickDisplay.innerText = userName;
+
     const userRef = db.ref('users/' + userId);
     userRef.onDisconnect().remove();
 
@@ -163,24 +171,28 @@
         return { r, g, b };
     }
 
-    function drawLine(x1, y1, x2, y2, color, size, isSquare, updates) {
+    function drawLine(x1, y1, x2, y2, color, size, isSquare) {
         const dist = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
         const steps = Math.max(dist, 1);
         for (let i = 0; i <= steps; i++) {
             const px = x1 + (x2 - x1) * (i / steps);
             const py = y1 + (y2 - y1) * (i / steps);
-            applyBrush(px, py, color, size, isSquare, updates);
+            applyBrush(px, py, color, size, isSquare);
         }
     }
 
-    function applyBrush(cx, cy, color, size, isSquare, updates) {
+    function applyBrush(cx, cy, color, size, isSquare) {
         const r = size / 2;
         const rSq = r * r;
+        ctx.fillStyle = color;
         for (let ix = -Math.ceil(r); ix <= Math.ceil(r); ix++) {
             for (let iy = -Math.ceil(r); iy <= Math.ceil(r); iy++) {
                 const dx = ix, dy = iy;
                 if (isSquare || (dx * dx + dy * dy <= rSq)) {
-                    updates[`${Math.floor(cx + ix)}_${Math.floor(cy + iy)}`] = color;
+                    const px = Math.floor(cx + ix);
+                    const py = Math.floor(cy + iy);
+                    pendingPixels[`${px}_${py}`] = color;
+                    ctx.fillRect(px, py, 1, 1);
                 }
             }
         }
@@ -199,7 +211,7 @@
         const updates = {};
         let count = 0;
         
-        while(queue.length > 0 && count < 2500) {
+        while(queue.length > 0 && count < 3000) {
             const [cx, cy] = queue.pop();
             if(cx < 0 || cy < 0 || cx >= 2048 || cy >= 1024) continue;
             const idx = (cy * 2048 + cx) * 4;
@@ -212,6 +224,7 @@
             }
         }
         if (Object.keys(updates).length > 0) {
+            ctx.putImageData(imgData, 0, 0);
             db.ref('pixels').update(updates);
         }
     }
@@ -224,18 +237,13 @@
                 floodFill(coords.x, coords.y, colorPicker.value);
             } else {
                 isDrawing = true;
-                if (!smoothCheck.checked) {
-                    brushX = coords.x; brushY = coords.y;
-                }
-                if (brushX === 0 && brushY === 0) {
-                     brushX = coords.x; brushY = coords.y;
-                }
-                lastX = brushX; lastY = brushY;
+                brushX = coords.x; 
+                brushY = coords.y;
+                lastX = coords.x; 
+                lastY = coords.y;
 
                 const color = currentTool === 'eraser' ? '#FFFFFF' : colorPicker.value;
-                const updates = {};
-                applyBrush(lastX, lastY, color, parseInt(sizePicker.value), currentTool === 'eraser', updates);
-                if (Object.keys(updates).length > 0) db.ref('pixels').update(updates);
+                applyBrush(lastX, lastY, color, parseInt(sizePicker.value), currentTool === 'eraser');
             }
         } else if (e.button === 2) isPanning = true;
     };
@@ -258,9 +266,7 @@
             }
 
             const color = currentTool === 'eraser' ? '#FFFFFF' : colorPicker.value;
-            const updates = {};
-            drawLine(lastX, lastY, finalX, finalY, color, parseInt(sizePicker.value), currentTool === 'eraser', updates);
-            if (Object.keys(updates).length > 0) db.ref('pixels').update(updates);
+            drawLine(lastX, lastY, finalX, finalY, color, parseInt(sizePicker.value), currentTool === 'eraser');
 
             lastX = finalX; lastY = finalY;
         }
@@ -276,12 +282,12 @@
         if (isDrawing && currentTool !== 'fill') {
             const target = getCoords(e);
             const color = currentTool === 'eraser' ? '#FFFFFF' : colorPicker.value;
-            const updates = {};
-            drawLine(lastX, lastY, target.x, target.y, color, parseInt(sizePicker.value), currentTool === 'eraser', updates);
-            if (Object.keys(updates).length > 0) db.ref('pixels').update(updates);
+            drawLine(lastX, lastY, target.x, target.y, color, parseInt(sizePicker.value), currentTool === 'eraser');
             
-            brushX = target.x; 
-            brushY = target.y;
+            if (Object.keys(pendingPixels).length > 0) {
+                db.ref('pixels').update(pendingPixels);
+                pendingPixels = {};
+            }
         }
         
         isDrawing = false;
