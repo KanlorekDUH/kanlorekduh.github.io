@@ -27,6 +27,8 @@
             background: #333; color: white; transition: 0.2s; font-size: 13px;
         }
         button.active { background: #007bff; box-shadow: 0 0 10px rgba(0,123,255,0.5); }
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
         input[type="color"] { border: none; width: 30px; height: 30px; cursor: pointer; background: none; }
         input[type="range"] { -webkit-appearance: none; width: 80px; height: 4px; background: #555; border-radius: 5px; }
         input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: #007bff; border-radius: 50%; cursor: pointer; }
@@ -67,6 +69,9 @@
         <label style="font-size:11px">Stabilization</label>
     </div>
     <div class="tool-group">
+        <button onclick="resetCamera()" class="btn-danger">Find Canvas</button>
+    </div>
+    <div class="tool-group">
         <span id="myNickDisplay"></span>
     </div>
 </div>
@@ -75,7 +80,7 @@
     <div id="preview-shape"></div>
 </div>
 
-<div id="footer">LMB: Draw | RMB: Pan | SHIFT: Snap 45° | Scroll: Zoom</div>
+<div id="footer">LMB: Draw | RMB: Pan | SHIFT: Snap 45° | Scroll: Zoom | CTRL+Z: Undo</div>
 
 <div id="viewport">
     <canvas id="canvas" width="2048" height="1024"></canvas>
@@ -92,7 +97,7 @@
         messagingSenderId: "155298386414",
         appId: "1:155298386414:web:f2a57cb5556a8e05c13eff"
     };
-    
+
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
@@ -123,6 +128,10 @@
     let pendingPixels = {};
     let pendingCount = 0;
     let remoteUsers = {};
+    
+    let undoStack = [];
+    let currentActionUndo = null;
+    let strokeImageData = null;
 
     const userName = prompt("Nickname:") || "User" + Math.floor(Math.random()*100);
     const userId = Math.random().toString(36).substring(7);
@@ -130,6 +139,14 @@
 
     const userRef = db.ref('users/' + userId);
     userRef.onDisconnect().remove();
+
+    // NOWA FUNKCJA: Reset kamery
+    function resetCamera() {
+        scale = 0.5;
+        camX = (window.innerWidth - 2048 * scale) / 2;
+        camY = (window.innerHeight - 1024 * scale) / 2;
+        updateTransform();
+    }
 
     function updateTransform() {
         canvas.style.transform = `translate(${camX}px, ${camY}px) scale(${scale})`;
@@ -178,6 +195,16 @@
         return { r, g, b };
     }
 
+    function rgbToHex(r, g, b) {
+        return "#" + (1 << 24 | r << 16 | g << 8 | b).toString(16).slice(1);
+    }
+
+    function getPixelHex(x, y, data) {
+        if (x < 0 || y < 0 || x >= 2048 || y >= 1024) return "#FFFFFF";
+        const idx = (y * 2048 + x) * 4;
+        return rgbToHex(data[idx], data[idx+1], data[idx+2]);
+    }
+
     function flushPixels() {
         if (pendingCount > 0) {
             db.ref('pixels').update(pendingPixels);
@@ -186,13 +213,10 @@
         }
     }
 
+    // NAPRAWA: Zwiększone zagęszczenie kroków (brak "gąsienicy")
     function drawLine(x1, y1, x2, y2, color, size, isSquare) {
         const dist = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-        const steps = Math.ceil(dist * 2);
-        if (steps === 0) {
-            applyBrush(x1, y1, color, size, isSquare);
-            return;
-        }
+        const steps = Math.max(Math.ceil(dist * 3), 1); 
         for (let i = 0; i <= steps; i++) {
             const px = x1 + (x2 - x1) * (i / steps);
             const py = y1 + (y2 - y1) * (i / steps);
@@ -210,7 +234,15 @@
                 if (isSquare || (dx * dx + dy * dy <= rSq)) {
                     const px = Math.floor(cx + ix);
                     const py = Math.floor(cy + iy);
+                    
+                    // NAPRAWA: Zabezpieczenie przed rysowaniem poza płótnem
+                    if (px < 0 || py < 0 || px >= 2048 || py >= 1024) continue;
+
                     const key = `${px}_${py}`;
+                    
+                    if (currentActionUndo && !(key in currentActionUndo)) {
+                        currentActionUndo[key] = getPixelHex(px, py, strokeImageData);
+                    }
                     
                     if (pendingPixels[key] !== color) {
                         pendingPixels[key] = color;
@@ -235,6 +267,7 @@
         
         if (targetR === fillRgb.r && targetG === fillRgb.g && targetB === fillRgb.b) return;
 
+        const origHex = rgbToHex(targetR, targetG, targetB);
         const visited = new Uint8Array(2097152);
         const queue = [x, y];
         const updates = {};
@@ -255,6 +288,7 @@
             if (data[idx] === targetR && data[idx+1] === targetG && data[idx+2] === targetB) {
                 data[idx] = fillRgb.r; data[idx+1] = fillRgb.g; data[idx+2] = fillRgb.b;
                 updates[`${cx}_${cy}`] = fillHex;
+                if (currentActionUndo) currentActionUndo[`${cx}_${cy}`] = origHex;
                 queue.push(cx+1, cy, cx-1, cy, cx, cy+1, cx, cy-1);
                 count++;
             }
@@ -270,8 +304,17 @@
     viewport.onmousedown = (e) => {
         const coords = getCoords(e);
         if (e.button === 0) {
+            strokeImageData = ctx.getImageData(0, 0, 2048, 1024).data;
+            currentActionUndo = {};
+            
             if (currentTool === 'fill') {
                 floodFill(coords.x, coords.y, colorPicker.value);
+                if (Object.keys(currentActionUndo).length > 0) {
+                    undoStack.push(currentActionUndo);
+                    if (undoStack.length > 20) undoStack.shift();
+                }
+                currentActionUndo = null;
+                strokeImageData = null;
             } else {
                 isDrawing = true;
                 brushX = coords.x; 
@@ -327,11 +370,28 @@
             drawLine(lastX, lastY, target.x, target.y, color, parseInt(sizePicker.value), currentTool === 'eraser');
             
             flushPixels();
+            
+            if (currentActionUndo && Object.keys(currentActionUndo).length > 0) {
+                undoStack.push(currentActionUndo);
+                if (undoStack.length > 20) undoStack.shift();
+            }
         }
         
+        currentActionUndo = null;
+        strokeImageData = null;
         isDrawing = false;
         isPanning = false;
     };
+
+    window.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'z') {
+            e.preventDefault();
+            if (!isDrawing && undoStack.length > 0) {
+                const action = undoStack.pop();
+                db.ref('pixels').update(action);
+            }
+        }
+    });
 
     viewport.onwheel = (e) => {
         e.preventDefault();
