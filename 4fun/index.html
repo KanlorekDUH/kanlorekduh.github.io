@@ -92,7 +92,7 @@
         messagingSenderId: "155298386414",
         appId: "1:155298386414:web:f2a57cb5556a8e05c13eff"
     };
-
+    
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
@@ -122,6 +122,7 @@
     let previewTimeout;
     let pendingPixels = {};
     let pendingCount = 0;
+    let remoteUsers = {};
 
     const userName = prompt("Nickname:") || "User" + Math.floor(Math.random()*100);
     const userId = Math.random().toString(36).substring(7);
@@ -132,6 +133,7 @@
 
     function updateTransform() {
         canvas.style.transform = `translate(${camX}px, ${camY}px) scale(${scale})`;
+        renderCursors();
     }
 
     function setTool(t) {
@@ -186,7 +188,11 @@
 
     function drawLine(x1, y1, x2, y2, color, size, isSquare) {
         const dist = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-        const steps = Math.max(dist, 1);
+        const steps = Math.ceil(dist * 2);
+        if (steps === 0) {
+            applyBrush(x1, y1, color, size, isSquare);
+            return;
+        }
         for (let i = 0; i <= steps; i++) {
             const px = x1 + (x2 - x1) * (i / steps);
             const py = y1 + (y2 - y1) * (i / steps);
@@ -311,7 +317,7 @@
             updateTransform();
         }
         
-        userRef.set({ x: e.clientX, y: e.clientY, name: userName, ts: Date.now() });
+        userRef.set({ x: target.x, y: target.y, name: userName, ts: Date.now() });
     };
 
     window.onmouseup = (e) => {
@@ -329,8 +335,14 @@
 
     viewport.onwheel = (e) => {
         e.preventDefault();
+        const target = getCoords(e);
         const factor = e.deltaY > 0 ? 0.9 : 1.1;
+        
         scale = Math.min(Math.max(0.1, scale * factor), 20);
+        
+        camX = e.clientX - target.x * scale;
+        camY = e.clientY - target.y * scale;
+        
         updateTransform();
         if (previewOverlay.style.display === 'flex') showSizePreview();
     };
@@ -347,23 +359,35 @@
         ctx.fillRect(x, y, 1, 1);
     });
 
-    db.ref('users').on('value', (s) => {
+    function renderCursors() {
         cursorsLayer.innerHTML = '';
-        const data = s.val();
         const now = Date.now();
         
-        for (let id in data) {
-            if (id === userId) continue;
-            
-            const u = data[id];
+        for (let id in remoteUsers) {
+            const u = remoteUsers[id];
             if (!u.ts || now - u.ts > 60000) continue;
+            
+            const screenX = u.x * scale + camX;
+            const screenY = u.y * scale + camY;
             
             const div = document.createElement('div');
             div.className = 'other-cursor';
-            div.style.left = u.x + 'px'; div.style.top = u.y + 'px';
+            div.style.left = screenX + 'px'; 
+            div.style.top = screenY + 'px';
             div.innerHTML = `<div class="dot"></div>${u.name}`;
             cursorsLayer.appendChild(div);
         }
+    }
+
+    db.ref('users').on('value', (s) => {
+        const data = s.val() || {};
+        remoteUsers = {};
+        for (let id in data) {
+            if (id !== userId) {
+                remoteUsers[id] = data[id];
+            }
+        }
+        renderCursors();
     });
 
     setInterval(() => {
