@@ -2,7 +2,7 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Pixel Art Studio Pro - Solid</title>
+    <title>Pixel Art Studio Pro - Performance</title>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
@@ -33,6 +33,16 @@
         .other-cursor { position: absolute; pointer-events: none; z-index: 50; font-size: 10px; text-shadow: 1px 1px 1px #000; }
         .dot { width: 4px; height: 4px; background: #ff4757; border-radius: 50%; }
         #footer { position: fixed; bottom: 15px; width: 100%; text-align: center; font-size: 11px; color: #666; pointer-events: none; }
+        
+        #preview-overlay {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            pointer-events: none; z-index: 200; display: none;
+            background: rgba(255, 255, 255, 0.9); padding: 20px; border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.5); align-items: center; justify-content: center;
+        }
+        #preview-shape { border: 2px solid #000; }
+        .shape-circle { border-radius: 50%; }
+        .shape-square { border-radius: 0; }
     </style>
 </head>
 <body>
@@ -55,6 +65,10 @@
         <input type="checkbox" id="smoothCheck">
         <label style="font-size:11px">Stabilizacja</label>
     </div>
+</div>
+
+<div id="preview-overlay">
+    <div id="preview-shape"></div>
 </div>
 
 <div id="footer">LPM: Rysuj | PPM: Kamera | SHIFT: Snap 45° | Rolka: Zoom</div>
@@ -86,6 +100,8 @@
     const sizeVal = document.getElementById('sizeVal');
     const smoothCheck = document.getElementById('smoothCheck');
     const colorPicker = document.getElementById('colorPicker');
+    const previewOverlay = document.getElementById('preview-overlay');
+    const previewShape = document.getElementById('preview-shape');
 
     let scale = 0.5;
     let camX = (window.innerWidth - 2048 * scale) / 2;
@@ -94,6 +110,7 @@
     let currentTool = 'pen';
     let lastX = 0, lastY = 0;
     let brushX = 0, brushY = 0;
+    let previewTimeout;
 
     const userName = prompt("Nick:") || "User" + Math.floor(Math.random()*100);
     const userId = Math.random().toString(36).substring(7);
@@ -110,9 +127,27 @@
         if(t === 'pen') { document.getElementById('penBtn').classList.add('active'); sizePicker.max = 25; }
         else if(t === 'eraser') { document.getElementById('eraBtn').classList.add('active'); sizePicker.max = 50; }
         else { document.getElementById('fillBtn').classList.add('active'); }
+        showSizePreview();
     }
 
-    sizePicker.oninput = () => sizeVal.innerText = sizePicker.value + 'px';
+    sizePicker.oninput = () => {
+        sizeVal.innerText = sizePicker.value + 'px';
+        showSizePreview();
+    };
+
+    function showSizePreview() {
+        const size = parseInt(sizePicker.value);
+        const visualSize = size * scale;
+        previewShape.style.width = Math.max(visualSize, 1) + 'px';
+        previewShape.style.height = Math.max(visualSize, 1) + 'px';
+        previewShape.className = currentTool === 'eraser' ? 'shape-square' : 'shape-circle';
+        
+        previewOverlay.style.display = 'flex';
+        clearTimeout(previewTimeout);
+        previewTimeout = setTimeout(() => {
+            previewOverlay.style.display = 'none';
+        }, 800);
+    }
 
     function getCoords(e) {
         return {
@@ -128,30 +163,24 @@
         return { r, g, b };
     }
 
-    function setPixel(x, y, color) {
-        db.ref('pixels/' + Math.floor(x) + '_' + Math.floor(y)).set(color);
-    }
-
-    function drawLine(x1, y1, x2, y2, color, size) {
+    function drawLine(x1, y1, x2, y2, color, size, isSquare, updates) {
         const dist = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
         const steps = Math.max(dist, 1);
         for (let i = 0; i <= steps; i++) {
             const px = x1 + (x2 - x1) * (i / steps);
             const py = y1 + (y2 - y1) * (i / steps);
-            applyBrush(px, py, color, size);
+            applyBrush(px, py, color, size, isSquare, updates);
         }
     }
 
-    // ZMIANA: Usunięto logikę 'smooth' (antyaliasingu)
-    function applyBrush(cx, cy, color, size) {
+    function applyBrush(cx, cy, color, size, isSquare, updates) {
         const r = size / 2;
-        // Pętla sprawdzająca obszar koła
+        const rSq = r * r;
         for (let ix = -Math.ceil(r); ix <= Math.ceil(r); ix++) {
             for (let iy = -Math.ceil(r); iy <= Math.ceil(r); iy++) {
                 const dx = ix, dy = iy;
-                // Jeśli punkt jest wewnątrz koła pędzla, rysujemy go (bez rozmycia)
-                if (dx*dx + dy*dy <= r*r) {
-                    setPixel(cx + ix, cy + iy, color);
+                if (isSquare || (dx * dx + dy * dy <= rSq)) {
+                    updates[`${Math.floor(cx + ix)}_${Math.floor(cy + iy)}`] = color;
                 }
             }
         }
@@ -166,7 +195,6 @@
         const targetR = data[targetIdx], targetG = data[targetIdx+1], targetB = data[targetIdx+2];
         const fillRgb = hexToRgb(fillHex);
         
-        // Brak zabezpieczenia koloru (pozwala malować po pustym/tym samym kolorze)
         const queue = [[x, y]];
         const updates = {};
         let count = 0;
@@ -183,7 +211,9 @@
                 count++;
             }
         }
-        db.ref('pixels').update(updates);
+        if (Object.keys(updates).length > 0) {
+            db.ref('pixels').update(updates);
+        }
     }
 
     viewport.oncontextmenu = (e) => e.preventDefault();
@@ -194,17 +224,18 @@
                 floodFill(coords.x, coords.y, colorPicker.value);
             } else {
                 isDrawing = true;
-                // Jeśli stabilizacja jest wyłączona, pędzel od razu skacze do myszki
                 if (!smoothCheck.checked) {
                     brushX = coords.x; brushY = coords.y;
                 }
-                // Jeśli włączona, zaczynamy od ostatniej pozycji pędzla (żeby nie skakał)
-                // ale przy pierwszym kliknięciu inicjujemy:
                 if (brushX === 0 && brushY === 0) {
                      brushX = coords.x; brushY = coords.y;
                 }
-                
                 lastX = brushX; lastY = brushY;
+
+                const color = currentTool === 'eraser' ? '#FFFFFF' : colorPicker.value;
+                const updates = {};
+                applyBrush(lastX, lastY, color, parseInt(sizePicker.value), currentTool === 'eraser', updates);
+                if (Object.keys(updates).length > 0) db.ref('pixels').update(updates);
             }
         } else if (e.button === 2) isPanning = true;
     };
@@ -213,7 +244,6 @@
         const target = getCoords(e);
         
         if (isDrawing) {
-            // Logika stabilizacji (Lazy Mouse)
             const lerpFactor = smoothCheck.checked ? 0.15 : 1.0;
             brushX += (target.x - brushX) * lerpFactor;
             brushY += (target.y - brushY) * lerpFactor;
@@ -228,7 +258,10 @@
             }
 
             const color = currentTool === 'eraser' ? '#FFFFFF' : colorPicker.value;
-            drawLine(lastX, lastY, finalX, finalY, color, parseInt(sizePicker.value));
+            const updates = {};
+            drawLine(lastX, lastY, finalX, finalY, color, parseInt(sizePicker.value), currentTool === 'eraser', updates);
+            if (Object.keys(updates).length > 0) db.ref('pixels').update(updates);
+
             lastX = finalX; lastY = finalY;
         }
         
@@ -239,20 +272,20 @@
         userRef.set({ x: e.clientX, y: e.clientY, name: userName });
     };
 
-    // ZMIANA: Naprawa blokowania kamery i dociąganie linii
     window.onmouseup = (e) => {
         if (isDrawing && currentTool !== 'fill') {
-            // Dociągnij linię do aktualnej pozycji myszy przy puszczeniu (żeby nie zostawiać przerwy)
             const target = getCoords(e);
             const color = currentTool === 'eraser' ? '#FFFFFF' : colorPicker.value;
-            drawLine(lastX, lastY, target.x, target.y, color, parseInt(sizePicker.value));
-            // Zaktualizuj pozycję pędzla na koniec
+            const updates = {};
+            drawLine(lastX, lastY, target.x, target.y, color, parseInt(sizePicker.value), currentTool === 'eraser', updates);
+            if (Object.keys(updates).length > 0) db.ref('pixels').update(updates);
+            
             brushX = target.x; 
             brushY = target.y;
         }
         
         isDrawing = false;
-        isPanning = false; // To naprawia problem z kamerą
+        isPanning = false;
     };
 
     viewport.onwheel = (e) => {
@@ -260,6 +293,7 @@
         const factor = e.deltaY > 0 ? 0.9 : 1.1;
         scale = Math.min(Math.max(0.1, scale * factor), 20);
         updateTransform();
+        if (previewOverlay.style.display === 'flex') showSizePreview();
     };
 
     db.ref('pixels').on('child_added', (s) => {
